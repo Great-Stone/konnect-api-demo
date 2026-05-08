@@ -1,0 +1,12 @@
+.env
+*.md
+!README.md
+
+terraform/konnect/.terraform/
+terraform/konnect/terraform.tfstate
+terraform/konnect/terraform.tfstate.backup
+
+certs/private.key
+.playwright-mcp/
+__pycache__/
+*.pyc

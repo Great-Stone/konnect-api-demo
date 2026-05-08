@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kong Enterprise Demo</title>
+    <link rel="icon" type="image/png" href="/img/image.png" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <img class="brand-logo" src="/img/image.png" alt="Kong logo" />
+          <div class="brand-copy">
+            <strong>Kong API Management</strong>
+          </div>
+        </div>
+        <div class="header-controls">
+          <label class="scene-picker">
+            <span>Scenes</span>
+            <select id="sceneSelect"></select>
+          </label>
+          <button id="resetSceneButton" class="ghost-button" type="button">Reset Scene</button>
+          <button id="viewArchitectureButton" class="ghost-button" type="button">View Architecture</button>
+          <button id="viewLogsButton" class="ghost-button" type="button">View Logs</button>
+          <button id="viewAuditButton" class="ghost-button" type="button">View Audit Trail</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="canvas-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Active Scene</p>
+              <h2 id="sceneTitle">Header-Based Routing</h2>
+            </div>
+            <div class="status-pills">
+              <span id="statusKong" class="status-pill neutral">Kong Waiting</span>
+              <span id="statusRoute" class="status-pill neutral">Route Pending</span>
+            </div>
+          </div>
+
+          <div class="topology-grid">
+            <svg class="topology-wireframe" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <line class="connector" data-connector="client-kong" x1="22" y1="50" x2="39" y2="50"></line>
+              <polyline class="connector" data-connector="kong-east" points="61,50 70,50 70,29 78,29"></polyline>
+              <polyline class="connector" data-connector="kong-west" points="61,50 70,50 70,71 78,71"></polyline>
+            </svg>
+
+            <div class="node node-client" data-node="client">
+              <span id="clientNodeLabel" class="node-label">Client</span>
+              <strong id="clientNodeTitle">Web Caller</strong>
+              <small id="clientNodeSubtitle">GET /orders</small>
+            </div>
+
+            <div class="node node-kong" data-node="kong">
+              <span id="kongNodeLabel" class="node-label">Gateway</span>
+              <strong id="kongNodeTitle">Kong Data Plane</strong>
+              <small id="kongNodeSubtitle">Konnect hybrid data plane</small>
+            </div>
+
+            <div class="node node-upstream node-east" data-node="east">
+              <span id="eastNodeLabel" class="node-label">Upstream</span>
+              <strong id="eastNodeTitle">Orders East</strong>
+              <small id="eastNodeSubtitle">x-region: east</small>
+            </div>
+
+            <div class="node node-upstream node-west" data-node="west">
+              <span id="westNodeLabel" class="node-label">Upstream</span>
+              <strong id="westNodeTitle">Orders West</strong>
+              <small id="westNodeSubtitle">x-region: west</small>
+            </div>
+          </div>
+
+          <div class="legend-row">
+            <span><i class="legend-dot active"></i> Active path</span>
+            <span><i class="legend-dot idle"></i> Idle path</span>
+            <span><i class="legend-dot error"></i> Route rejected</span>
+          </div>
+        </section>
+
+        <aside class="control-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Scenario Controls</p>
+              <h2 id="controlPanelTitle">Request Builder</h2>
+            </div>
+          </div>
+
+          <div id="headerRoutingControls" class="control-card scene-control-group">
+            <p class="label">Route Selector</p>
+            <div class="segmented-control" id="regionControl">
+              <button class="segment active" data-region="east" type="button">east</button>
+              <button class="segment" data-region="west" type="button">west</button>
+              <button class="segment" data-region="missing" type="button">missing</button>
+            </div>
+          </div>
+
+          <div id="rateModeControls" class="control-card scene-control-group hidden">
+            <p class="label">Execution Mode</p>
+            <div class="segmented-control segmented-control-two" id="modeControl">
+              <button class="segment active" data-mode="anonymous" type="button">anonymous</button>
+              <button class="segment" data-mode="consumer" type="button">consumer</button>
+            </div>
+          </div>
+
+          <div id="rateConsumerControls" class="control-card scene-control-group hidden">
+            <p class="label">Consumer</p>
+            <div class="segmented-control segmented-control-two" id="consumerControl">
+              <button class="segment" data-consumer="consumer-gold" type="button">consumer-gold</button>
+              <button class="segment active" data-consumer="consumer-standard" type="button">consumer-standard</button>
+            </div>
+          </div>
+
+          <div id="rateCounterControls" class="control-card scene-control-group hidden">
+            <p class="label">Execution Counter</p>
+            <p class="body-copy">
+              Each click sends one real request through Kong. The current window counter and reset time come from the latest Kong response.
+            </p>
+          </div>
+
+          <div id="resilienceScenarioControls" class="control-card scene-control-group hidden">
+            <p class="label">Scenario</p>
+            <div class="segmented-control segmented-control-two" id="resilienceScenarioControl">
+              <button class="segment active" data-resilience-scenario="weighted-load-balancing" type="button">
+                Weighted Load Balancing
+              </button>
+              <button class="segment" data-resilience-scenario="circuit-breaker" type="button">
+                Circuit Breaker
+              </button>
+            </div>
+          </div>
+
+          <div id="resilienceInstanceControls" class="control-card scene-control-group hidden">
+            <p class="label">Service Instances</p>
+            <div class="instance-control-list">
+              <div class="instance-control-row">
+                <div class="instance-copy">
+                  <strong>Service Instance 1</strong>
+                  <small id="instance1Status">unknown</small>
+                </div>
+                <div class="instance-actions">
+                  <button class="ghost-button compact-button" data-instance-action="start" data-instance-id="instance-1" type="button">Start</button>
+                  <button class="ghost-button compact-button" data-instance-action="stop" data-instance-id="instance-1" type="button">Stop</button>
+                </div>
+              </div>
+              <div class="instance-control-row">
+                <div class="instance-copy">
+                  <strong>Service Instance 2</strong>
+                  <small id="instance2Status">unknown</small>
+                </div>
+                <div class="instance-actions">
+                  <button class="ghost-button compact-button" data-instance-action="start" data-instance-id="instance-2" type="button">Start</button>
+                  <button class="ghost-button compact-button" data-instance-action="stop" data-instance-id="instance-2" type="button">Stop</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="identityConsumerControls" class="control-card scene-control-group hidden">
+            <p class="label">Consumer</p>
+            <div class="segmented-control segmented-control-two" id="identityConsumerControl">
+              <button class="segment active" data-identity-consumer="consumer-1" type="button">consumer-1</button>
+              <button class="segment" data-identity-consumer="consumer-2" type="button">consumer-2</button>
+            </div>
+          </div>
+
+          <div id="identityTokenControls" class="control-card scene-control-group hidden">
+            <p class="label">Access Token</p>
+            <textarea id="tokenEditor" class="token-editor" spellcheck="false"></textarea>
+            <div class="action-row">
+              <button id="generateTokenButton" class="ghost-button" type="button">Generate Token</button>
+              <button id="decodeTokenButton" class="ghost-button" type="button">Decode JWT</button>
+            </div>
+          </div>
+
+          <div id="identityJwtControls" class="control-card scene-control-group hidden">
+            <p class="label">Decoded JWT</p>
+            <pre id="decodedJwtOutput" class="decoded-jwt-output">Decode the current token to inspect its claims.</pre>
+          </div>
+
+          <div class="control-card request-preview">
+            <p class="label">Request Preview</p>
+            <div id="requestPreviewGrid" class="request-preview-grid"></div>
+          </div>
+
+          <div class="action-row">
+            <button id="runScenarioButton" class="primary-button" type="button">Run Scenario</button>
+            <button id="resetPanelButton" class="ghost-button" type="button">Reset</button>
+          </div>
+
+          <div class="secondary-row">
+            <button id="viewSceneDetailsButton" class="ghost-button full-width-button" type="button">
+              View Scene Details
+            </button>
+          </div>
+
+          <div class="control-card">
+            <p class="label">Expected Outcome</p>
+            <p id="expectedOutcome" class="body-copy">Orders East should receive the request.</p>
+          </div>
+
+        </aside>
+      </main>
+
+      <section class="console-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Console</p>
+            <h2>Request and Response</h2>
+          </div>
+          <div class="console-actions">
+            <button id="consoleDetailButton" class="ghost-button" type="button" disabled>Detailed View</button>
+          </div>
+        </div>
+        <div id="consoleOutput" class="console-output">
+          <div class="console-empty console-empty-wide">
+            <p>Run the scene to see the full request and response that passed through Kong.</p>
+          </div>
+        </div>
+      </section>
+
+      <div id="architectureModal" class="modal-shell hidden" aria-hidden="true">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="architectureTitle">
+          <div class="modal-header">
+            <div>
+              <p class="eyebrow">Architecture</p>
+              <h2 id="architectureTitle">Header-Based Routing Flow</h2>
+            </div>
+            <button id="closeArchitectureButton" class="ghost-button" type="button">Close</button>
+          </div>
+          <div class="modal-body">
+            <p>Client requests enter the Kong data plane through a single public path.</p>
+            <p>The data plane receives its configuration from a Kong control plane running in hybrid mode with PostgreSQL.</p>
+            <p>Kong evaluates the <code>x-region</code> request header and forwards the request to the matching upstream service.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="sceneDetailsModal" class="modal-shell hidden" aria-hidden="true">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="sceneDetailsTitle">
+          <div class="modal-header">
+            <div>
+              <p class="eyebrow">Scene Details</p>
+              <h2 id="sceneDetailsTitle">Scene Entities</h2>
+            </div>
+            <button id="closeSceneDetailsButton" class="ghost-button" type="button">Close</button>
+          </div>
+          <div id="sceneDetailsContent" class="modal-body entity-list"></div>
+        </div>
+      </div>
+
+      <div id="detailViewModal" class="modal-shell hidden" aria-hidden="true">
+        <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="detailViewTitle">
+          <div class="modal-header">
+            <div>
+              <p class="eyebrow">Detailed View</p>
+              <h2 id="detailViewTitle">Scene Details</h2>
+            </div>
+            <button id="closeDetailViewButton" class="ghost-button" type="button">Close</button>
+          </div>
+          <div id="detailMeta" class="detail-meta-grid"></div>
+          <div class="detail-grid">
+            <div class="detail-pane">
+              <p class="label">Curl Command</p>
+              <pre id="detailCurl" class="detail-pre"></pre>
+            </div>
+            <div class="detail-pane">
+              <p class="label">Response</p>
+              <pre id="detailResponse" class="detail-pre"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

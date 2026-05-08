@@ -1,0 +1,113 @@
+services:
+  kong-dp:
+    image: ${KONG_IMAGE:-kong/kong-gateway:3.14}
+    container_name: tcs-kong-dp
+    environment:
+      KONG_ROLE: data_plane
+      KONG_DATABASE: "off"
+      KONG_VITALS: "off"
+      KONG_CLUSTER_MTLS: pki
+      KONG_CLUSTER_CONTROL_PLANE: ${KONNECT_CLUSTER_CONTROL_PLANE:-1d2c4eaf29.us.cp.konghq.com:443}
+      KONG_CLUSTER_SERVER_NAME: ${KONNECT_CLUSTER_SERVER_NAME:-1d2c4eaf29.us.cp.konghq.com}
+      KONG_CLUSTER_TELEMETRY_ENDPOINT: ${KONNECT_CLUSTER_TELEMETRY_ENDPOINT:-1d2c4eaf29.us.tp.konghq.com:443}
+      KONG_CLUSTER_TELEMETRY_SERVER_NAME: ${KONNECT_CLUSTER_TELEMETRY_SERVER_NAME:-1d2c4eaf29.us.tp.konghq.com}
+      KONG_CLUSTER_CERT: /certs/public.cer
+      KONG_CLUSTER_CERT_KEY: /certs/private.key
+      KONG_LUA_SSL_TRUSTED_CERTIFICATE: system
+      KONG_TLS_CERTIFICATE_VERIFY: "off"
+      KONG_KONNECT_MODE: "on"
+      KONG_ROUTER_FLAVOR: expressions
+      KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
+      KONG_ADMIN_LISTEN: "off"
+      KONG_STATUS_LISTEN: 0.0.0.0:8100
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_LOG_LEVEL: info
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    volumes:
+      - ./certs:/certs:ro
+
+  orders-east:
+    image: python:3.13-slim
+    container_name: tcs-orders-east
+    working_dir: /app
+    command: ["python", "-u", "server.py", "--service", "orders-east", "--region", "east", "--port", "9101"]
+    ports:
+      - "9101:9101"
+    volumes:
+      - ./services/mock_upstream:/app:ro
+
+  orders-west:
+    image: python:3.13-slim
+    container_name: tcs-orders-west
+    working_dir: /app
+    command: ["python", "-u", "server.py", "--service", "orders-west", "--region", "west", "--port", "9102"]
+    ports:
+      - "9102:9102"
+    volumes:
+      - ./services/mock_upstream:/app:ro
+
+  orders-instance-1:
+    image: python:3.13-slim
+    container_name: tcs-orders-instance-1
+    working_dir: /app
+    command: ["python", "-u", "server.py", "--service", "orders-instance-1", "--region", "instance-1", "--port", "9201"]
+    ports:
+      - "9201:9201"
+    volumes:
+      - ./services/mock_upstream:/app:ro
+
+  orders-instance-2:
+    image: python:3.13-slim
+    container_name: tcs-orders-instance-2
+    working_dir: /app
+    command: ["python", "-u", "server.py", "--service", "orders-instance-2", "--region", "instance-2", "--port", "9202"]
+    ports:
+      - "9202:9202"
+    volumes:
+      - ./services/mock_upstream:/app:ro
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.0
+    container_name: tcs-keycloak
+    command: ["start-dev", "--http-enabled=true", "--hostname-strict=false"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    ports:
+      - "8081:8080"
+
+  demo-ui:
+    image: python:3.13-slim
+    container_name: tcs-demo-ui
+    working_dir: /app
+    command: ["python", "-u", "app.py"]
+    environment:
+      DEMO_HOST: 0.0.0.0
+      DEMO_PORT: "8080"
+      KONG_PROXY_URL: ${KONG_PROXY_URL:-http://kong-dp:8000}
+      DEMO_LOGS_URL: ${DEMO_LOGS_URL:-https://cloud.konghq.com}
+      DEMO_AUDIT_URL: ${DEMO_AUDIT_URL:-https://cloud.konghq.com}
+      AD_PROTECTED_API_TENANT_ID: ${AD_PROTECTED_API_TENANT_ID:-}
+      AD_PROTECTED_API_AUDIENCE: ${AD_PROTECTED_API_AUDIENCE:-}
+      AD_CONSUMER1_CLIENT_ID: ${AD_CONSUMER1_CLIENT_ID:-}
+      AD_CONSUMER1_SECRET: ${AD_CONSUMER1_SECRET:-}
+      AD_CONSUMER2_CLIENT_ID: ${AD_CONSUMER2_CLIENT_ID:-}
+      AD_CONSUMER2_SECRET: ${AD_CONSUMER2_SECRET:-}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-kong-demo}
+      KEYCLOAK_CONSUMER1_CLIENT_ID: ${KEYCLOAK_CONSUMER1_CLIENT_ID:-consumer-1}
+      KEYCLOAK_CONSUMER1_SECRET: ${KEYCLOAK_CONSUMER1_SECRET:-consumer-1-secret}
+      KEYCLOAK_CONSUMER2_CLIENT_ID: ${KEYCLOAK_CONSUMER2_CLIENT_ID:-consumer-2}
+      KEYCLOAK_CONSUMER2_SECRET: ${KEYCLOAK_CONSUMER2_SECRET:-consumer-2-secret}
+      KEYCLOAK_INTERNAL_BASE_URL: http://keycloak:8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./services/demo_ui:/app:ro
+      - ./img:/img:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - kong-dp
+      - keycloak
