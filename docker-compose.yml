@@ -17,17 +17,30 @@ services:
       KONG_TLS_CERTIFICATE_VERIFY: "off"
       KONG_KONNECT_MODE: "on"
       KONG_ROUTER_FLAVOR: expressions
+      KONG_TRACING_INSTRUMENTATIONS: all
+      KONG_TRACING_SAMPLING_RATE: "1.0"
+      KONG_REAL_IP_HEADER: X-Forwarded-For
+      KONG_TRUSTED_IPS: 0.0.0.0/0,::/0
+      KONG_REAL_IP_RECURSIVE: "on"
       KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
       KONG_ADMIN_LISTEN: "off"
       KONG_STATUS_LISTEN: 0.0.0.0:8100
       KONG_PROXY_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_LOG_LEVEL: info
+      KONG_PLUGINS: bundled,payload-crypto-demo
+      KONG_LUA_PACKAGE_PATH: /opt/custom/?.lua;/opt/custom/?/init.lua;;
+      KONG_NGINX_MAIN_ENV: CRYPTO_GATEWAY_PRIVATE_KEY_PASSPHRASE
+      CRYPTO_GATEWAY_PRIVATE_KEY_PASSPHRASE: ${CRYPTO_GATEWAY_PRIVATE_KEY_PASSPHRASE:-gateway-demo-passphrase}
     ports:
       - "8000:8000"
       - "8443:8443"
     volumes:
       - ./certs:/certs:ro
+      - ./certs/crypto:/crypto:ro
+      - ./kong_plugins:/opt/custom:ro
+    depends_on:
+      - otel-collector
 
   orders-east:
     image: python:3.13-slim
@@ -69,6 +82,56 @@ services:
     volumes:
       - ./services/mock_upstream:/app:ro
 
+  orders-v1:
+    image: python:3.13-slim
+    container_name: tcs-orders-v1
+    working_dir: /app
+    command:
+      [
+        "python",
+        "-u",
+        "server.py",
+        "--service",
+        "orders-v1",
+        "--region",
+        "version-v1",
+        "--api-version",
+        "v1",
+        "--release-stage",
+        "deprecated",
+        "--port",
+        "9301",
+      ]
+    ports:
+      - "9301:9301"
+    volumes:
+      - ./services/mock_upstream:/app:ro
+
+  orders-v2:
+    image: python:3.13-slim
+    container_name: tcs-orders-v2
+    working_dir: /app
+    command:
+      [
+        "python",
+        "-u",
+        "server.py",
+        "--service",
+        "orders-v2",
+        "--region",
+        "version-v2",
+        "--api-version",
+        "v2",
+        "--release-stage",
+        "current",
+        "--port",
+        "9302",
+      ]
+    ports:
+      - "9302:9302"
+    volumes:
+      - ./services/mock_upstream:/app:ro
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.0
     container_name: tcs-keycloak
@@ -79,6 +142,101 @@ services:
     ports:
       - "8081:8080"
 
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: tcs-loki
+    command: ["-config.file=/etc/loki/config.yaml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki/config.yaml:/etc/loki/config.yaml:ro
+
+  tempo:
+    image: grafana/tempo:2.5.0
+    container_name: tcs-tempo
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    ports:
+      - "3201:3200"
+      - "4319:4318"
+    volumes:
+      - ./observability/tempo/config.yaml:/etc/tempo/config.yaml:ro
+
+  tempo-portal:
+    image: nginx:1.27-alpine
+    container_name: tcs-tempo-portal
+    ports:
+      - "3200:80"
+    volumes:
+      - ./observability/tempo-portal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./observability/tempo-portal/index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - tempo
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.101.0
+    container_name: tcs-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./observability/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - loki
+      - tempo
+
+  konnect-audit-receiver:
+    image: python:3.13-slim
+    container_name: tcs-konnect-audit-receiver
+    working_dir: /app
+    command: ["python", "-u", "app.py"]
+    environment:
+      AUDIT_RECEIVER_HOST: 0.0.0.0
+      AUDIT_RECEIVER_PORT: "8090"
+      AUDIT_SHARED_SECRET: ${KONNECT_AUDIT_SHARED_SECRET:-konnect-audit-demo-secret}
+      AUDIT_LOKI_PUSH_URL: http://loki:3100/loki/api/v1/push
+    ports:
+      - "8091:8090"
+    volumes:
+      - ./services/konnect_audit_receiver:/app:ro
+    depends_on:
+      - loki
+
+  crypto-helper:
+    image: python:3.13-slim
+    container_name: tcs-crypto-helper
+    working_dir: /app
+    command: ["python", "-u", "app.py"]
+    environment:
+      CRYPTO_HELPER_HOST: 0.0.0.0
+      CRYPTO_HELPER_PORT: "8092"
+      CRYPTO_GATEWAY_PRIVATE_KEY_PATH: /crypto/gateway_private.pem
+      CRYPTO_GATEWAY_PUBLIC_KEY_PATH: /crypto/gateway_public.pem
+      CRYPTO_CLIENT_PRIVATE_KEY_PATH: /crypto/client_private.pem
+      CRYPTO_CLIENT_PUBLIC_KEY_PATH: /crypto/client_public.pem
+      CRYPTO_GATEWAY_PRIVATE_KEY_PASSPHRASE: ${CRYPTO_GATEWAY_PRIVATE_KEY_PASSPHRASE:-gateway-demo-passphrase}
+    volumes:
+      - ./services/crypto_helper:/app:ro
+      - ./certs/crypto:/crypto:ro
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: tcs-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_USERS_DEFAULT_THEME: dark
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - loki
+      - tempo
+
   demo-ui:
     image: python:3.13-slim
     container_name: tcs-demo-ui
@@ -88,8 +246,14 @@ services:
       DEMO_HOST: 0.0.0.0
       DEMO_PORT: "8080"
       KONG_PROXY_URL: ${KONG_PROXY_URL:-http://kong-dp:8000}
-      DEMO_LOGS_URL: ${DEMO_LOGS_URL:-https://cloud.konghq.com}
-      DEMO_AUDIT_URL: ${DEMO_AUDIT_URL:-https://cloud.konghq.com}
+      DEMO_LOGS_URL: ${DEMO_LOGS_URL:-https://cloud.konghq.com/us/analytics/dashboards/85891a7b-d91e-4548-ba83-f82cd561342d}
+      DEMO_REQUEST_AUDIT_URL: ${DEMO_REQUEST_AUDIT_URL:-http://localhost:3001/d/kong-observability-overview/kong-observability-overview}
+      DEMO_AUDIT_URL: ${DEMO_AUDIT_URL:-http://localhost:3001/d/konnect-audit-trail/konnect-audit-trail}
+      DEMO_TRACE_URL: ${DEMO_TRACE_URL:-http://localhost:3001/explore}
+      DEMO_DEBUGGER_URL: ${DEMO_DEBUGGER_URL:-https://cloud.konghq.com/us/analytics/debugger/sessions?cp_id=abf0ddb5-0c27-4ab3-8825-971be6217904}
+      KONNECT_TOKEN: ${KONNECT_TOKEN:-}
+      KONNECT_CP_ID: ${KONNECT_CP_ID:-}
+      KONNECT_SERVER_URL: ${KONNECT_SERVER_URL:-https://us.api.konghq.com}
       AD_PROTECTED_API_TENANT_ID: ${AD_PROTECTED_API_TENANT_ID:-}
       AD_PROTECTED_API_AUDIENCE: ${AD_PROTECTED_API_AUDIENCE:-}
       AD_CONSUMER1_CLIENT_ID: ${AD_CONSUMER1_CLIENT_ID:-}
@@ -102,6 +266,7 @@ services:
       KEYCLOAK_CONSUMER2_CLIENT_ID: ${KEYCLOAK_CONSUMER2_CLIENT_ID:-consumer-2}
       KEYCLOAK_CONSUMER2_SECRET: ${KEYCLOAK_CONSUMER2_SECRET:-consumer-2-secret}
       KEYCLOAK_INTERNAL_BASE_URL: http://keycloak:8080
+      CRYPTO_HELPER_URL: http://crypto-helper:8092
     ports:
       - "8080:8080"
     volumes:
@@ -111,3 +276,6 @@ services:
     depends_on:
       - kong-dp
       - keycloak
+      - grafana
+      - konnect-audit-receiver
+      - crypto-helper

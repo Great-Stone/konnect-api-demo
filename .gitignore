@@ -1,12 +1,16 @@
 .env
 *.md
 !README.md
+!keycloak-setup.md
+!azure-ad-setup.md
 
 terraform/konnect/.terraform/
 terraform/konnect/terraform.tfstate
 terraform/konnect/terraform.tfstate.backup
 
 certs/private.key
+certs/crypto/
 .playwright-mcp/
 __pycache__/
 *.pyc
+.runtime/

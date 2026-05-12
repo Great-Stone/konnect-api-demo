@@ -5,8 +5,19 @@ const state = {
   consumer: "consumer-standard",
   identityConsumer: "consumer-1",
   identityToken: "",
+  ipPreset: "allowed",
+  schemaCase: "valid-request",
+  sizeCase: "positive",
+  injectionSubscene: "query-params",
+  transportSecurityCase: "http-blocked",
+  versionRoutingMode: "path",
+  apiVersion: "v1",
+  canaryScenario: "40-rollout",
+  canaryHeaderMode: "always",
+  canaryConsumer: "consumer-pilot",
+  deprecationCase: "deprecated-v1",
   resilienceScenario: "weighted-load-balancing",
-  links: { logs: "#", audit: "#" },
+  links: { logs: "#", requestAudit: "#", audit: "#", trace: "#", payloadInspection: "#" },
   scenes: {},
   lastRun: null,
   countdownTimer: null,
@@ -35,19 +46,62 @@ const SCENE_DEFAULTS = {
     controlTitle: "Identity Controls",
     emptyText: "Generate a Keycloak token for the selected consumer, decode it, and send it through Kong for authorization.",
   },
+  "network-policy-ip-allow-deny": {
+    controlTitle: "Network Policy Controls",
+    emptyText: "Run the scene to see Kong evaluate the forwarded client IP and either proxy or block the request.",
+  },
+  "data-quality-schema-validation": {
+    controlTitle: "Validation Controls",
+    emptyText: "Run the scene to see Kong validate the request schema before the upstream is reached.",
+  },
+  "traffic-control-request-size-limiting": {
+    controlTitle: "Payload Controls",
+    emptyText: "Run the scene to see Kong enforce the request payload size limit before proxying.",
+  },
+  "transformation-gateway-payload-encryption": {
+    controlTitle: "Transformation Controls",
+    emptyText: "Run the scene to see Kong decrypt the inbound request envelope, proxy plaintext upstream, and return an encrypted response envelope.",
+  },
+  "security-injection-protection": {
+    controlTitle: "Injection Controls",
+    emptyText: "Run the scene to see Kong inspect the selected request location and block malicious patterns.",
+  },
+  "transport-security-http-enforcement": {
+    controlTitle: "Transport Controls",
+    emptyText: "Run the scene to see Kong reject plain HTTP or issue an HTTPS redirect before the upstream is reached.",
+  },
+  "api-lifecycle-versioned-routing": {
+    controlTitle: "Lifecycle Controls",
+    emptyText: "Run the scene to see Kong route requests to v1 or v2 using path-based or header-based version matching.",
+  },
+  "api-lifecycle-canary-migration": {
+    controlTitle: "Canary Controls",
+    emptyText: "Run the scene to see Kong shift traffic from v1 to v2 using percentage, time, header override, or consumer-aware canary policy.",
+  },
+  "api-lifecycle-deprecation": {
+    controlTitle: "Deprecation Controls",
+    emptyText: "Run the scene to see Kong signal v1 deprecation headers or enforce the sunset policy.",
+  },
 };
 
 const elements = {
   sceneSelect: document.getElementById("sceneSelect"),
+  scenePicker: document.getElementById("scenePicker"),
+  scenePickerTrigger: document.getElementById("scenePickerTrigger"),
+  scenePickerCurrent: document.getElementById("scenePickerCurrent"),
+  sceneMenu: document.getElementById("sceneMenu"),
   sceneTitle: document.getElementById("sceneTitle"),
   controlPanelTitle: document.getElementById("controlPanelTitle"),
   runScenarioButton: document.getElementById("runScenarioButton"),
   resetSceneButton: document.getElementById("resetSceneButton"),
   resetPanelButton: document.getElementById("resetPanelButton"),
   viewArchitectureButton: document.getElementById("viewArchitectureButton"),
+  viewTraceButton: document.getElementById("viewTraceButton"),
   viewLogsButton: document.getElementById("viewLogsButton"),
+  viewRequestAuditButton: document.getElementById("viewRequestAuditButton"),
+  viewDebuggerButton: document.getElementById("viewDebuggerButton"),
+  viewPayloadInspectionButton: document.getElementById("viewPayloadInspectionButton"),
   viewAuditButton: document.getElementById("viewAuditButton"),
-  viewSceneDetailsButton: document.getElementById("viewSceneDetailsButton"),
   consoleDetailButton: document.getElementById("consoleDetailButton"),
   architectureModal: document.getElementById("architectureModal"),
   closeArchitectureButton: document.getElementById("closeArchitectureButton"),
@@ -57,8 +111,7 @@ const elements = {
   detailViewModal: document.getElementById("detailViewModal"),
   closeDetailViewButton: document.getElementById("closeDetailViewButton"),
   detailMeta: document.getElementById("detailMeta"),
-  detailCurl: document.getElementById("detailCurl"),
-  detailResponse: document.getElementById("detailResponse"),
+  detailSteps: document.getElementById("detailSteps"),
   requestPreviewGrid: document.getElementById("requestPreviewGrid"),
   expectedOutcome: document.getElementById("expectedOutcome"),
   consoleOutput: document.getElementById("consoleOutput"),
@@ -73,6 +126,17 @@ const elements = {
   identityConsumerControls: document.getElementById("identityConsumerControls"),
   identityTokenControls: document.getElementById("identityTokenControls"),
   identityJwtControls: document.getElementById("identityJwtControls"),
+  ipPresetControls: document.getElementById("ipPresetControls"),
+  schemaCaseControls: document.getElementById("schemaCaseControls"),
+  sizeCaseControls: document.getElementById("sizeCaseControls"),
+  injectionSubsceneControls: document.getElementById("injectionSubsceneControls"),
+  transportSecurityCaseControls: document.getElementById("transportSecurityCaseControls"),
+  versionRoutingModeControls: document.getElementById("versionRoutingModeControls"),
+  versionRoutingVersionControls: document.getElementById("versionRoutingVersionControls"),
+  canaryScenarioControls: document.getElementById("canaryScenarioControls"),
+  canaryHeaderControls: document.getElementById("canaryHeaderControls"),
+  canaryConsumerControls: document.getElementById("canaryConsumerControls"),
+  deprecationCaseControls: document.getElementById("deprecationCaseControls"),
   tokenEditor: document.getElementById("tokenEditor"),
   generateTokenButton: document.getElementById("generateTokenButton"),
   decodeTokenButton: document.getElementById("decodeTokenButton"),
@@ -98,6 +162,17 @@ const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
 const consumerButtons = Array.from(document.querySelectorAll("[data-consumer]"));
 const identityConsumerButtons = Array.from(document.querySelectorAll("[data-identity-consumer]"));
 const resilienceScenarioButtons = Array.from(document.querySelectorAll("[data-resilience-scenario]"));
+const ipPresetButtons = Array.from(document.querySelectorAll("[data-ip-preset]"));
+const schemaCaseButtons = Array.from(document.querySelectorAll("[data-schema-case]"));
+const sizeCaseButtons = Array.from(document.querySelectorAll("[data-size-case]"));
+const injectionSubsceneButtons = Array.from(document.querySelectorAll("[data-injection-subscene]"));
+const transportSecurityCaseButtons = Array.from(document.querySelectorAll("[data-transport-security-case]"));
+const versionRoutingModeButtons = Array.from(document.querySelectorAll("[data-version-routing-mode]"));
+const apiVersionButtons = Array.from(document.querySelectorAll("[data-api-version]"));
+const canaryScenarioButtons = Array.from(document.querySelectorAll("[data-canary-scenario]"));
+const canaryHeaderModeButtons = Array.from(document.querySelectorAll("[data-canary-header-mode]"));
+const canaryConsumerButtons = Array.from(document.querySelectorAll("[data-canary-consumer]"));
+const deprecationCaseButtons = Array.from(document.querySelectorAll("[data-deprecation-case]"));
 const instanceActionButtons = Array.from(document.querySelectorAll("[data-instance-action]"));
 const nodes = {
   kong: document.querySelector('[data-node="kong"]'),
@@ -135,6 +210,111 @@ function renderRows(container, rows) {
 }
 
 function computePreviewRows() {
+  if (state.currentScene === "network-policy-ip-allow-deny") {
+    return [
+      ["Method", "GET"],
+      ["Path", "/orders/network/ip"],
+      [
+        "Source IP",
+        state.ipPreset === "allowed" ? "10.10.10.8" : state.ipPreset === "denied" ? "10.10.10.66" : "203.0.113.25",
+      ],
+      ["Policy Preset", state.ipPreset],
+    ];
+  }
+  if (state.currentScene === "data-quality-schema-validation") {
+    return [
+      ["Method", "POST"],
+      ["Path", "/orders/validate/schema"],
+      ["Validation Case", state.schemaCase.replaceAll("-", " ")],
+      ["Contract", "body + query + header"],
+    ];
+  }
+  if (state.currentScene === "traffic-control-request-size-limiting") {
+    return [
+      ["Method", "POST"],
+      ["Path", "/orders/limits/request-size"],
+      ["Case", state.sizeCase === "positive" ? "does not exceed limit" : "exceeds limit"],
+      ["Payload Policy", "2 KB max"],
+    ];
+  }
+  if (state.currentScene === "transformation-gateway-payload-encryption") {
+    return [
+      ["Method", "POST"],
+      ["Path", "/orders/security/payload-crypto"],
+      ["Request Format", "encrypted session key + IV + payload"],
+      ["Response Format", "encrypted session key + IV + payload"],
+    ];
+  }
+  if (state.currentScene === "security-injection-protection") {
+    return [
+      ["Method", state.injectionSubscene === "body" ? "POST" : "GET"],
+      [
+        "Path",
+        state.injectionSubscene === "query-params"
+          ? "/orders/security/injection/query"
+          : state.injectionSubscene === "body"
+            ? "/orders/security/injection/body"
+            : "/orders/security/injection/headers",
+      ],
+      ["Inspection", state.injectionSubscene.replaceAll("-", " ")],
+      ["Pattern", "sql injection"],
+    ];
+  }
+  if (state.currentScene === "transport-security-http-enforcement") {
+    return [
+      ["Method", "GET"],
+      ["Path", state.transportSecurityCase === "http-blocked" ? "/orders/transport/http-blocked" : "/orders/transport/http-redirect"],
+      ["Transport Case", state.transportSecurityCase === "http-blocked" ? "http blocked" : "http to https redirect"],
+      ["Entry Protocol", "http"],
+    ];
+  }
+  if (state.currentScene === "api-lifecycle-versioned-routing") {
+    return [
+      ["Method", "GET"],
+      ["Routing Mode", state.versionRoutingMode],
+      [
+        "Path",
+        state.versionRoutingMode === "path"
+          ? state.apiVersion === "v1"
+            ? "/api/v1/orders"
+            : "/api/v2/orders"
+          : "/orders/version/header",
+      ],
+      ["Version", state.apiVersion],
+    ];
+  }
+  if (state.currentScene === "api-lifecycle-canary-migration") {
+    return [
+      ["Method", "GET"],
+      ["Scenario", state.canaryScenario.replaceAll("-", " ")],
+      [
+        "Input",
+        state.canaryScenario === "header-based"
+          ? `x-canary-version: ${state.canaryHeaderMode}`
+          : state.canaryScenario === "consumer-based"
+            ? state.canaryConsumer
+            : state.canaryScenario === "time-based"
+              ? "2 minute rollout window"
+              : "40 percent rollout",
+      ],
+      ["Target", "v1 primary / v2 canary"],
+    ];
+  }
+  if (state.currentScene === "api-lifecycle-deprecation") {
+    return [
+      ["Method", "GET"],
+      [
+        "Path",
+        state.deprecationCase === "deprecated-v1"
+          ? "/orders/deprecation/v1"
+          : state.deprecationCase === "current-v2"
+            ? "/orders/deprecation/v2"
+            : "/orders/deprecation/v1/sunset",
+      ],
+      ["Scenario", state.deprecationCase.replaceAll("-", " ")],
+      ["Policy", state.deprecationCase === "sunset-enforced" ? "enforcement" : "headers"],
+    ];
+  }
   if (state.currentScene === "traffic-control-rate-limiting") {
     return [
       ["Method", "GET"],
@@ -190,36 +370,195 @@ function computePreviewRows() {
 }
 
 function computeExpectedOutcome() {
+  if (state.currentScene === "network-policy-ip-allow-deny") {
+    return state.ipPreset === "allowed"
+      ? "Kong should allow the forwarded client IP because it matches the route-level allow list, so the request reaches the protected API."
+      : state.ipPreset === "denied"
+        ? "Kong should block the forwarded client IP because it matches the route-level deny list. Enforcement happens at the gateway before any upstream call."
+        : "Kong should block the client IP because it is not present in the configured allow list. The protected API should remain untouched.";
+  }
+  if (state.currentScene === "data-quality-schema-validation") {
+    return state.schemaCase === "valid-request"
+      ? "Kong should accept the request because the body schema, query contract, required header, and allowed Content-Type all satisfy the request-validator policy."
+      : state.schemaCase === "invalid-body"
+        ? "Kong should reject the request because the JSON body violates the configured schema before the request reaches the protected API."
+        : state.schemaCase === "invalid-query-param"
+          ? "Kong should reject the request because the query parameter contract fails validation at the request-validator policy."
+          : "Kong should reject the request because the required header or Content-Type does not satisfy the configured request-validator policy.";
+  }
+  if (state.currentScene === "traffic-control-request-size-limiting") {
+    return state.sizeCase === "positive"
+      ? "Kong should forward the request because the payload stays within the configured 2 KB request-size-limiting threshold."
+      : "Kong should reject the request because the body exceeds the configured 2 KB request-size-limiting threshold before the protected API is reached.";
+  }
+  if (state.currentScene === "transformation-gateway-payload-encryption") {
+    return "Kong should decrypt the inbound request envelope at the custom plugin using the gateway private key, forward plaintext upstream, then encrypt the upstream response with a new AES session key before returning it to the client.";
+  }
+  if (state.currentScene === "security-injection-protection") {
+    return state.injectionSubscene === "query-params"
+      ? "Kong should inspect query parameters with the Injection Protection plugin and block requests that match the configured SQL-style pattern set."
+      : state.injectionSubscene === "body"
+        ? "Kong should inspect the request body with the Injection Protection plugin and block the request before any upstream call if a malicious pattern is detected."
+        : "Kong should inspect request headers with the Injection Protection plugin and reject the request when a configured injection pattern is present.";
+  }
+  if (state.currentScene === "transport-security-http-enforcement") {
+    return state.transportSecurityCase === "http-blocked"
+      ? "Kong should reject the plain HTTP request with the route-level HTTPS enforcement policy and return HTTP 426 without forwarding to the protected API."
+      : "Kong should return HTTP 308 with a Location header that points the caller to HTTPS. The demo then follows that Location and shows the successful HTTPS call separately.";
+  }
+  if (state.currentScene === "api-lifecycle-versioned-routing") {
+    return state.versionRoutingMode === "path"
+      ? `Kong should match the ${state.apiVersion} path route directly and send the request to the ${state.apiVersion} upstream service.`
+      : `Kong should keep the shared path and route to ${state.apiVersion} by evaluating the x-api-version header.`;
+  }
+  if (state.currentScene === "api-lifecycle-canary-migration") {
+    if (state.canaryScenario === "header-based") {
+      return "Kong should use the canary override header policy. x-canary-version=always forces the request to v2, while x-canary-version=never forces it to stay on v1.";
+    }
+    if (state.canaryScenario === "consumer-based") {
+      return "Kong should authenticate the consumer, evaluate ACL-aware canary policy, and send consumer-pilot to v2 while consumer-standard-lifecycle remains on v1.";
+    }
+    return state.canaryScenario === "time-based"
+      ? "Kong should gradually shift traffic from v1 to v2 across the configured 2-minute rollout window. With duration=120s and steps=20, the rollout advances in 5% increments every 6 seconds."
+      : "Kong should apply a fixed 40% canary split on this route, so roughly 40% of requests reach v2 while the rest stay on the v1 primary service. The service counters show the observed distribution.";
+  }
+  if (state.currentScene === "api-lifecycle-deprecation") {
+    return state.deprecationCase === "deprecated-v1"
+      ? "Kong should still allow v1 traffic but attach deprecation, sunset, and successor-version headers so clients can see that v1 is in retirement mode."
+      : state.deprecationCase === "current-v2"
+        ? "Kong should return the current v2 response normally with no deprecation signaling because this route is the active version."
+        : "Kong should enforce the sunset policy at the gateway and block deprecated v1 before the upstream is reached.";
+  }
   if (state.currentScene === "traffic-control-rate-limiting") {
     if (state.mode === "anonymous") {
-      return "Anonymous requests should pass for requests 1-20 in each 30-second fixed window. Request 21 should return 429.";
+      return "Kong should apply the anonymous fixed-window rate limit at the service level: requests 1-20 pass within 30 seconds, and request 21 returns HTTP 429.";
     }
     return state.consumer === "consumer-gold"
-      ? "consumer-gold should pass for requests 1-10 in each 30-second fixed window. Request 11 should return 429."
-      : "consumer-standard should pass for requests 1-5 in each 30-second fixed window. Request 6 should return 429.";
+      ? "Kong should authenticate consumer-gold and apply the consumer-scoped fixed-window policy: requests 1-10 pass in 30 seconds, and request 11 returns HTTP 429."
+      : "Kong should authenticate consumer-standard and apply the stricter consumer-scoped fixed-window policy: requests 1-5 pass in 30 seconds, and request 6 returns HTTP 429.";
   }
   if (state.currentScene === "resilience-failover-health-checks") {
     return state.resilienceScenario === "weighted-load-balancing"
-      ? "Kong should distribute traffic across both healthy targets using the configured 30:70 weights."
-      : "Kong should round robin across both healthy targets, then remove an unhealthy target from rotation and fail over to the remaining target.";
+      ? "Kong should distribute traffic across both healthy targets using the configured 30:70 upstream weights, so instance 2 should receive more requests than instance 1 over time."
+      : "Kong should use active and passive health checks to remove an unhealthy target from the round-robin pool and fail over to the remaining healthy instance.";
   }
   if (state.currentScene === "identity-azure-token-validation") {
-    return "Kong should validate the Azure AD bearer token and only forward valid requests to the protected API.";
+    return `Kong should validate the Azure AD bearer token with the openid-connect plugin, map the appid claim to the Kong Consumer, and only forward valid requests for ${state.identityConsumer}.`;
   }
   if (state.currentScene === "identity-keycloak-authorization") {
     return state.identityConsumer === "consumer-1"
-      ? "consumer-1 should be authorized because its service account token contains the required role."
-      : "consumer-2 should be denied because its service account token does not contain the required role.";
+      ? "Kong should validate the Keycloak token, map the azp claim to the Kong Consumer, and authorize consumer-1 because its service account token contains the required role."
+      : "Kong should validate the Keycloak token but reject consumer-2 at the authorization policy because its service account token does not contain the required role.";
   }
   if (state.region === "missing") {
-    return "Kong should apply the catch-all policy route and return a guided missing-header response.";
+    return "Kong should match the catch-all route and apply the request-termination policy because the required x-region header is missing.";
   }
   return state.region === "east"
-    ? "Orders East should receive the request."
-    : "Orders West should receive the request.";
+    ? "Kong should evaluate x-region=east and route the request to svc-orders-header-east."
+    : "Kong should evaluate x-region=west and route the request to svc-orders-header-west.";
 }
 
 function defaultTopologyForScene() {
+  if (state.currentScene === "network-policy-ip-allow-deny") {
+    return {
+      labels: {
+        client: ["Client", "IP Caller", state.ipPreset],
+        kong: ["Gateway", "Kong Data Plane", "IP restriction policy"],
+        east: ["Protected API", "Orders API", "Awaiting policy decision"],
+        west: ["Network Policy", "Allow + Deny List", "Awaiting evaluation"],
+      },
+      nodes: { west: "static" },
+    };
+  }
+  if (state.currentScene === "data-quality-schema-validation") {
+    return {
+      labels: {
+        client: ["Client", "Schema Caller", state.schemaCase.replaceAll("-", " ")],
+        kong: ["Gateway", "Kong Data Plane", "Request validator"],
+        east: ["Protected API", "Orders API", "Awaiting validation"],
+        west: ["Schema Policy", "Body + Query + Headers", "Awaiting evaluation"],
+      },
+      nodes: { west: "static" },
+    };
+  }
+  if (state.currentScene === "traffic-control-request-size-limiting") {
+    return {
+      labels: {
+        client: [
+          "Client",
+          "Payload Caller",
+          state.sizeCase === "positive" ? "does not exceed limit" : "exceeds limit",
+        ],
+        kong: ["Gateway", "Kong Data Plane", "2 KB request size limit"],
+        east: ["Protected API", "Orders API", "Awaiting size check"],
+        west: ["Payload Policy", "Request Size Limit", "Awaiting evaluation"],
+      },
+      nodes: { west: "static" },
+    };
+  }
+  if (state.currentScene === "transformation-gateway-payload-encryption") {
+    return {
+      labels: {
+        client: ["Client", "Encrypted Caller", "encrypted session key + IV + payload"],
+        kong: ["Gateway", "Kong Data Plane", "decrypt request + encrypt response"],
+        east: ["Upstream", "Orders API", "awaiting plaintext request"],
+        west: ["Crypto Policy", "payload-crypto-demo", "AES/CBC/PKCS5Padding"],
+      },
+      nodes: { west: "static" },
+    };
+  }
+  if (state.currentScene === "security-injection-protection") {
+    return {
+      labels: {
+        client: ["Client", "Injection Caller", state.injectionSubscene.replaceAll("-", " ")],
+        kong: ["Gateway", "Kong Data Plane", "Injection protection"],
+        east: ["Protected API", "Orders API", "Awaiting inspection"],
+        west: ["Inspection Policy", state.injectionSubscene.replaceAll("-", " "), "Awaiting scan"],
+      },
+      nodes: { west: "static" },
+    };
+  }
+  if (state.currentScene === "transport-security-http-enforcement") {
+    return {
+      labels: {
+        client: ["Client", "HTTP Caller", "plain HTTP attempt"],
+        kong: ["Gateway", "Kong Data Plane", "transport security policy"],
+        east: ["Protected API", "Orders API", "Not reached"],
+        west: ["TLS Policy", "HTTPS Enforcement", state.transportSecurityCase === "http-blocked" ? "blocked" : "redirected"],
+      },
+      nodes: { west: "static" },
+    };
+  }
+  if (state.currentScene === "api-lifecycle-versioned-routing") {
+    return {
+      labels: {
+        client: ["Client", "Versioned Caller", `${state.versionRoutingMode} routing`],
+        kong: ["Gateway", "Kong Data Plane", "version-aware routes"],
+        east: ["API Version", "Orders API v1", "deprecated but active"],
+        west: ["API Version", "Orders API v2", "current release"],
+      },
+    };
+  }
+  if (state.currentScene === "api-lifecycle-canary-migration") {
+    return {
+      labels: {
+        client: ["Client", "Migration Caller", state.canaryScenario.replaceAll("-", " ")],
+        kong: ["Gateway", "Kong Data Plane", "Canary Release plugin"],
+        east: ["Primary", "Orders API v1", "stable baseline"],
+        west: ["Canary", "Orders API v2", "migration target"],
+      },
+    };
+  }
+  if (state.currentScene === "api-lifecycle-deprecation") {
+    return {
+      labels: {
+        client: ["Client", "Lifecycle Caller", state.deprecationCase.replaceAll("-", " ")],
+        kong: ["Gateway", "Kong Data Plane", "deprecation and sunset policy"],
+        east: ["Deprecated", "Orders API v1", "deprecated lifecycle"],
+        west: ["Current", "Orders API v2", "preferred successor"],
+      },
+    };
+  }
   if (state.currentScene === "traffic-control-rate-limiting") {
     return {
       labels: {
@@ -333,6 +672,14 @@ function stringifyPayload(value) {
   if (typeof value === "string") {
     return value;
   }
+  if (
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    typeof value.raw === "string"
+  ) {
+    return value.raw;
+  }
   return JSON.stringify(value, null, 2);
 }
 
@@ -346,11 +693,20 @@ function formatHeaders(headers) {
     .join("\n");
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function renderConsolePane(title, statusMarkup, sections) {
   return `
     <section class="console-pane">
       <div class="console-pane-header">
-        <strong>${title}</strong>
+        <strong>${escapeHtml(title)}</strong>
         ${statusMarkup || ""}
       </div>
       <div class="console-pane-body">
@@ -358,8 +714,8 @@ function renderConsolePane(title, statusMarkup, sections) {
           .map(
             ([label, value, className = ""]) => `
               <div class="console-section">
-                <span class="console-section-label">${label}</span>
-                <pre class="console-code ${className}">${value}</pre>
+                <span class="console-section-label">${escapeHtml(label)}</span>
+                <pre class="console-code ${className}">${escapeHtml(value)}</pre>
               </div>
             `,
           )
@@ -375,6 +731,24 @@ function renderConsole(consoleView) {
   const requestSummary = `${request.method || "GET"} ${request.endpoint || "/"}`;
   const responseStatus = response.status != null ? `HTTP ${response.status}` : "";
   const responseStatusClass = response.status >= 400 ? "error" : "success";
+  const responseRows = [
+    ["Summary", requestSummary],
+    ["Headers", formatHeaders(response.headers)],
+    ["Body", stringifyPayload(response.body)],
+  ];
+
+  if (response.headers?.location) {
+    responseRows.push(["Location Received", response.headers.location]);
+  }
+
+  if (response.followUp) {
+    const followUpStatus =
+      response.followUp.status != null ? `HTTP ${response.followUp.status}` : "Failed";
+    const followUpEndpoint = response.followUp.displayEndpoint || response.followUp.endpoint || "";
+    responseRows.push(["Follow-Up HTTPS Call", `${response.followUp.method || "GET"} ${followUpEndpoint} -> ${followUpStatus}`]);
+    responseRows.push(["Follow-Up Headers", formatHeaders(response.followUp.headers)]);
+    responseRows.push(["Follow-Up Body", stringifyPayload(response.followUp.body)]);
+  }
 
   elements.consoleOutput.innerHTML = `
     <div class="console-split">
@@ -387,11 +761,7 @@ function renderConsole(consoleView) {
       ${renderConsolePane(
         "Response",
         `<span class="console-status ${responseStatusClass}">${responseStatus}</span>`,
-        [
-          ["Summary", requestSummary],
-          ["Headers", formatHeaders(response.headers)],
-          ["Body", stringifyPayload(response.body)],
-        ],
+        responseRows,
       )}
     </div>
   `;
@@ -478,14 +848,45 @@ function renderDetailView(detailView) {
     .map(
       ([label, value]) => `
         <div class="entity-block">
-          <p class="label">${label}</p>
-          <strong>${value}</strong>
+          <p class="label">${escapeHtml(label)}</p>
+          <strong>${escapeHtml(value)}</strong>
         </div>
       `,
     )
     .join("");
-  elements.detailCurl.textContent = detailView.curl || "";
-  elements.detailResponse.textContent = JSON.stringify(detailView.response || {}, null, 2);
+  const steps = detailView.steps?.length
+    ? detailView.steps
+    : [
+        {
+          title: "Command 1",
+          command: detailView.curl || "",
+          response: detailView.response || {},
+        },
+      ];
+  elements.detailSteps.innerHTML = steps
+    .map((step, index) => {
+      const command = step.command || "";
+      const response = stringifyPayload(step.response || {});
+      return `
+        <section class="detail-step">
+          <div class="detail-step-header">
+            <p class="label">Step ${index + 1}</p>
+            <strong>${escapeHtml(step.title || `Command ${index + 1}`)}</strong>
+          </div>
+          <div class="detail-step-grid">
+            <div class="detail-pane">
+              <p class="label">Command</p>
+              <pre class="detail-pre">${escapeHtml(command)}</pre>
+            </div>
+            <div class="detail-pane">
+              <p class="label">Response</p>
+              <pre class="detail-pre">${escapeHtml(response)}</pre>
+            </div>
+          </div>
+        </section>
+      `;
+    })
+    .join("");
 }
 
 function decodeJwt(token) {
@@ -514,12 +915,36 @@ function updateControlVisibility() {
   const isIdentityScene =
     state.currentScene === "identity-azure-token-validation" ||
     state.currentScene === "identity-keycloak-authorization";
-  elements.headerRoutingControls.classList.toggle("hidden", isRateScene || isResilienceScene || isIdentityScene);
+  const isIpScene = state.currentScene === "network-policy-ip-allow-deny";
+  const isSchemaScene = state.currentScene === "data-quality-schema-validation";
+  const isSizeScene = state.currentScene === "traffic-control-request-size-limiting";
+  const isCryptoScene = state.currentScene === "transformation-gateway-payload-encryption";
+  const isInjectionScene = state.currentScene === "security-injection-protection";
+  const isTransportSecurityScene = state.currentScene === "transport-security-http-enforcement";
+  const isVersionedRoutingScene = state.currentScene === "api-lifecycle-versioned-routing";
+  const isCanaryScene = state.currentScene === "api-lifecycle-canary-migration";
+  const isDeprecationScene = state.currentScene === "api-lifecycle-deprecation";
+  elements.headerRoutingControls.classList.toggle(
+    "hidden",
+    isRateScene || isResilienceScene || isIdentityScene || isIpScene || isSchemaScene || isSizeScene || isCryptoScene || isInjectionScene || isTransportSecurityScene || isVersionedRoutingScene || isCanaryScene || isDeprecationScene,
+  );
   elements.rateModeControls.classList.toggle("hidden", !isRateScene);
   elements.rateCounterControls.classList.toggle("hidden", !isRateScene);
   elements.rateConsumerControls.classList.toggle("hidden", !isRateScene || state.mode !== "consumer");
   elements.resilienceScenarioControls.classList.toggle("hidden", !isResilienceScene);
   elements.resilienceInstanceControls.classList.toggle("hidden", !isResilienceScene);
+  elements.ipPresetControls.classList.toggle("hidden", !isIpScene);
+  elements.schemaCaseControls.classList.toggle("hidden", !isSchemaScene);
+  elements.sizeCaseControls.classList.toggle("hidden", !isSizeScene);
+  // Crypto scene uses the shared run/reset controls only.
+  elements.injectionSubsceneControls.classList.toggle("hidden", !isInjectionScene);
+  elements.transportSecurityCaseControls.classList.toggle("hidden", !isTransportSecurityScene);
+  elements.versionRoutingModeControls.classList.toggle("hidden", !isVersionedRoutingScene);
+  elements.versionRoutingVersionControls.classList.toggle("hidden", !isVersionedRoutingScene);
+  elements.canaryScenarioControls.classList.toggle("hidden", !isCanaryScene);
+  elements.canaryHeaderControls.classList.toggle("hidden", !isCanaryScene || state.canaryScenario !== "header-based");
+  elements.canaryConsumerControls.classList.toggle("hidden", !isCanaryScene || state.canaryScenario !== "consumer-based");
+  elements.deprecationCaseControls.classList.toggle("hidden", !isDeprecationScene);
   elements.identityTokenControls.classList.toggle("hidden", !isIdentityScene);
   elements.identityJwtControls.classList.toggle("hidden", !isIdentityScene);
   elements.identityConsumerControls.classList.toggle(
@@ -603,6 +1028,37 @@ async function runScenario() {
     if (state.currentScene === "traffic-control-rate-limiting") {
       path = "/api/scenes/rate-limiting/run";
       body = { mode: state.mode, consumer: state.consumer };
+    } else if (state.currentScene === "network-policy-ip-allow-deny") {
+      path = "/api/scenes/ip-restriction/run";
+      body = { preset: state.ipPreset };
+    } else if (state.currentScene === "data-quality-schema-validation") {
+      path = "/api/scenes/schema-validation/run";
+      body = { case: state.schemaCase };
+    } else if (state.currentScene === "traffic-control-request-size-limiting") {
+      path = "/api/scenes/request-size/run";
+      body = { case: state.sizeCase };
+    } else if (state.currentScene === "transformation-gateway-payload-encryption") {
+      path = "/api/scenes/payload-crypto/run";
+      body = {};
+    } else if (state.currentScene === "security-injection-protection") {
+      path = "/api/scenes/injection-protection/run";
+      body = { subscene: state.injectionSubscene };
+    } else if (state.currentScene === "transport-security-http-enforcement") {
+      path = "/api/scenes/transport-security/run";
+      body = { case: state.transportSecurityCase };
+    } else if (state.currentScene === "api-lifecycle-versioned-routing") {
+      path = "/api/scenes/versioned-routing/run";
+      body = { mode: state.versionRoutingMode, version: state.apiVersion };
+    } else if (state.currentScene === "api-lifecycle-canary-migration") {
+      path = "/api/scenes/canary/run";
+      body = {
+        scenario: state.canaryScenario,
+        override: state.canaryHeaderMode,
+        consumer: state.canaryConsumer,
+      };
+    } else if (state.currentScene === "api-lifecycle-deprecation") {
+      path = "/api/scenes/deprecation/run";
+      body = { case: state.deprecationCase };
     } else if (state.currentScene === "resilience-failover-health-checks") {
       path = "/api/scenes/resilience/run";
       body = { scenario: state.resilienceScenario };
@@ -622,7 +1078,7 @@ async function runScenario() {
     const payload = await response.json();
     state.lastRun = payload;
     elements.consoleDetailButton.disabled = false;
-    elements.expectedOutcome.textContent = payload.expectedOutcome;
+    elements.expectedOutcome.textContent = computeExpectedOutcome();
     renderRows(elements.requestPreviewGrid, payload.requestPreview);
     renderConsole(payload.consoleView);
     renderTopology(payload.topology);
@@ -689,6 +1145,15 @@ async function refreshResilienceStatus() {
 }
 
 async function resetSceneRuntime() {
+  if (state.currentScene === "api-lifecycle-canary-migration") {
+    await fetch("/api/scenes/canary/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    resetView();
+    return;
+  }
   if (state.currentScene !== "resilience-failover-health-checks") {
     if (
       state.currentScene === "identity-azure-token-validation" ||
@@ -723,6 +1188,35 @@ async function changeInstanceState(instanceId, action) {
   }
 }
 
+function closeSceneMenu() {
+  elements.scenePicker.classList.remove("open");
+  elements.sceneMenu.classList.add("hidden");
+  elements.scenePickerTrigger.setAttribute("aria-expanded", "false");
+}
+
+function openSceneMenu() {
+  elements.scenePicker.classList.add("open");
+  elements.sceneMenu.classList.remove("hidden");
+  elements.scenePickerTrigger.setAttribute("aria-expanded", "true");
+}
+
+function renderSceneMenu() {
+  const sceneOptions = Array.from(elements.sceneSelect.options).map((option) => ({
+    id: option.value,
+    label: option.textContent,
+  }));
+  elements.sceneMenu.innerHTML = sceneOptions
+    .map(
+      (scene) => `
+        <button class="scene-menu-option ${scene.id === state.currentScene ? "active" : ""}" type="button" data-scene-option="${scene.id}">
+          ${scene.label}
+        </button>
+      `,
+    )
+    .join("");
+  elements.scenePickerCurrent.textContent = sceneOptions.find((scene) => scene.id === state.currentScene)?.label || "Select Scene";
+}
+
 async function loadConfig() {
   const response = await fetch("/api/config");
   const payload = await response.json();
@@ -731,6 +1225,7 @@ async function loadConfig() {
   elements.sceneSelect.innerHTML = payload.sceneOptions
     .map((scene) => `<option value="${scene.id}">${scene.label}</option>`)
     .join("");
+  renderSceneMenu();
   updateSceneState(payload.sceneOptions[0]?.id || "traffic-routing-header");
 }
 
@@ -746,6 +1241,9 @@ function updateArchitectureModal() {
 function updateSceneState(sceneId) {
   stopCountdown();
   state.currentScene = sceneId;
+  elements.sceneSelect.value = sceneId;
+  renderSceneMenu();
+  closeSceneMenu();
   const scene = currentSceneDetails();
   elements.sceneTitle.textContent = scene.title || "Scene";
   updateControlVisibility();
@@ -769,6 +1267,88 @@ function openLink(url) {
     return;
   }
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function getCurrentRequestId() {
+  const headers = state.lastRun?.consoleView?.request?.headers || {};
+  return headers["x-request-id"] || headers["X-Request-Id"] || null;
+}
+
+function getTraceUrl() {
+  let baseUrl = state.links.trace;
+  if (!baseUrl || baseUrl === "#") {
+    return "#";
+  }
+  try {
+    const parsed = new URL(baseUrl, window.location.origin);
+    const isTempoPortal =
+      parsed.hostname === "localhost" &&
+      (parsed.port === "3200" || parsed.port === "3201");
+    if (isTempoPortal) {
+      baseUrl = "http://localhost:3001/explore";
+    }
+  } catch (_error) {
+    // keep original URL if parsing fails
+  }
+  const requestId = getCurrentRequestId();
+  const url = new URL(baseUrl, window.location.origin);
+  const paneState = {
+    trace: {
+      datasource: "tempo",
+      queries: [
+        {
+          refId: "A",
+          queryType: "traceql",
+          query: requestId ? `{ span."request.id" = "${requestId}" }` : '{ span."request.id" = "your-request-id" }',
+        },
+      ],
+      range: {
+        from: "now-1h",
+        to: "now",
+      },
+    },
+  };
+  url.searchParams.set("panes", JSON.stringify(paneState));
+  url.searchParams.set("schemaVersion", "1");
+  url.searchParams.set("orgId", "1");
+  if (requestId) {
+    url.searchParams.set("request_id", requestId);
+  }
+  return url.toString();
+}
+
+function getPayloadInspectionUrl() {
+  const requestId = getCurrentRequestId();
+  const baseUrl = state.links.payloadInspection && state.links.payloadInspection !== "#"
+    ? state.links.payloadInspection
+    : "http://localhost:3001/explore";
+  const url = new URL(baseUrl, window.location.origin);
+  const query = requestId
+    ? `{service_name="kong-data-plane"} | request_id="${requestId}"`
+    : '{service_name="kong-data-plane"} | request_id="your-request-id"';
+  const paneState = {
+    logs: {
+      datasource: "loki",
+      queries: [
+        {
+          refId: "A",
+          expr: query,
+          queryType: "range",
+        },
+      ],
+      range: {
+        from: "now-1h",
+        to: "now",
+      },
+    },
+  };
+  url.searchParams.set("panes", JSON.stringify(paneState));
+  url.searchParams.set("schemaVersion", "1");
+  url.searchParams.set("orgId", "1");
+  if (requestId) {
+    url.searchParams.set("request_id", requestId);
+  }
+  return url.toString();
 }
 
 function toggleModal(element, show) {
@@ -813,6 +1393,106 @@ for (const button of identityConsumerButtons) {
   });
 }
 
+for (const button of ipPresetButtons) {
+  button.addEventListener("click", () => {
+    state.ipPreset = button.dataset.ipPreset;
+    setActiveButton(ipPresetButtons, "ipPreset", state.ipPreset);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of schemaCaseButtons) {
+  button.addEventListener("click", () => {
+    state.schemaCase = button.dataset.schemaCase;
+    setActiveButton(schemaCaseButtons, "schemaCase", state.schemaCase);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of sizeCaseButtons) {
+  button.addEventListener("click", () => {
+    state.sizeCase = button.dataset.sizeCase;
+    setActiveButton(sizeCaseButtons, "sizeCase", state.sizeCase);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of injectionSubsceneButtons) {
+  button.addEventListener("click", () => {
+    state.injectionSubscene = button.dataset.injectionSubscene;
+    setActiveButton(injectionSubsceneButtons, "injectionSubscene", state.injectionSubscene);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of transportSecurityCaseButtons) {
+  button.addEventListener("click", () => {
+    state.transportSecurityCase = button.dataset.transportSecurityCase;
+    setActiveButton(transportSecurityCaseButtons, "transportSecurityCase", state.transportSecurityCase);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of versionRoutingModeButtons) {
+  button.addEventListener("click", () => {
+    state.versionRoutingMode = button.dataset.versionRoutingMode;
+    setActiveButton(versionRoutingModeButtons, "versionRoutingMode", state.versionRoutingMode);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of apiVersionButtons) {
+  button.addEventListener("click", () => {
+    state.apiVersion = button.dataset.apiVersion;
+    setActiveButton(apiVersionButtons, "apiVersion", state.apiVersion);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of canaryScenarioButtons) {
+  button.addEventListener("click", () => {
+    state.canaryScenario = button.dataset.canaryScenario;
+    setActiveButton(canaryScenarioButtons, "canaryScenario", state.canaryScenario);
+    updateControlVisibility();
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of canaryHeaderModeButtons) {
+  button.addEventListener("click", () => {
+    state.canaryHeaderMode = button.dataset.canaryHeaderMode;
+    setActiveButton(canaryHeaderModeButtons, "canaryHeaderMode", state.canaryHeaderMode);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of canaryConsumerButtons) {
+  button.addEventListener("click", () => {
+    state.canaryConsumer = button.dataset.canaryConsumer;
+    setActiveButton(canaryConsumerButtons, "canaryConsumer", state.canaryConsumer);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of deprecationCaseButtons) {
+  button.addEventListener("click", () => {
+    state.deprecationCase = button.dataset.deprecationCase;
+    setActiveButton(deprecationCaseButtons, "deprecationCase", state.deprecationCase);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
 for (const button of resilienceScenarioButtons) {
   button.addEventListener("click", () => {
     state.resilienceScenario = button.dataset.resilienceScenario;
@@ -838,17 +1518,33 @@ elements.tokenEditor.addEventListener("input", () => {
 });
 elements.generateTokenButton.addEventListener("click", generateIdentityToken);
 elements.decodeTokenButton.addEventListener("click", handleDecodeToken);
-elements.sceneSelect.addEventListener("change", (event) => updateSceneState(event.target.value));
+elements.scenePickerTrigger.addEventListener("click", () => {
+  if (elements.sceneMenu.classList.contains("hidden")) {
+    openSceneMenu();
+  } else {
+    closeSceneMenu();
+  }
+});
+elements.sceneMenu.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-scene-option]");
+  if (!option) {
+    return;
+  }
+  updateSceneState(option.dataset.sceneOption);
+});
 elements.runScenarioButton.addEventListener("click", runScenario);
 elements.resetSceneButton.addEventListener("click", resetSceneRuntime);
 elements.resetPanelButton.addEventListener("click", resetSceneRuntime);
-elements.viewArchitectureButton.addEventListener("click", () => toggleModal(elements.architectureModal, true));
-elements.viewLogsButton.addEventListener("click", () => openLink(state.links.logs));
-elements.viewAuditButton.addEventListener("click", () => openLink(state.links.audit));
-elements.viewSceneDetailsButton.addEventListener("click", () => {
+elements.viewArchitectureButton.addEventListener("click", () => {
   renderSceneDetails();
   toggleModal(elements.sceneDetailsModal, true);
 });
+elements.viewTraceButton.addEventListener("click", () => openLink(getTraceUrl()));
+elements.viewLogsButton.addEventListener("click", () => openLink(state.links.logs));
+elements.viewRequestAuditButton.addEventListener("click", () => openLink(state.links.requestAudit));
+elements.viewDebuggerButton.addEventListener("click", () => openLink(state.links.debugger));
+elements.viewPayloadInspectionButton.addEventListener("click", () => openLink(getPayloadInspectionUrl()));
+elements.viewAuditButton.addEventListener("click", () => openLink(state.links.audit));
 elements.consoleDetailButton.addEventListener("click", () => {
   if (!state.lastRun) {
     return;
@@ -868,8 +1564,15 @@ for (const modal of [elements.architectureModal, elements.sceneDetailsModal, ele
   });
 }
 
+document.addEventListener("click", (event) => {
+  if (!elements.scenePicker.contains(event.target)) {
+    closeSceneMenu();
+  }
+});
+
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    closeSceneMenu();
     toggleModal(elements.architectureModal, false);
     toggleModal(elements.sceneDetailsModal, false);
     toggleModal(elements.detailViewModal, false);
@@ -881,6 +1584,17 @@ loadConfig().then(() => {
   setActiveButton(modeButtons, "mode", state.mode);
   setActiveButton(consumerButtons, "consumer", state.consumer);
   setActiveButton(identityConsumerButtons, "identityConsumer", state.identityConsumer);
+  setActiveButton(ipPresetButtons, "ipPreset", state.ipPreset);
+  setActiveButton(schemaCaseButtons, "schemaCase", state.schemaCase);
+  setActiveButton(sizeCaseButtons, "sizeCase", state.sizeCase);
+  setActiveButton(injectionSubsceneButtons, "injectionSubscene", state.injectionSubscene);
+  setActiveButton(transportSecurityCaseButtons, "transportSecurityCase", state.transportSecurityCase);
+  setActiveButton(versionRoutingModeButtons, "versionRoutingMode", state.versionRoutingMode);
+  setActiveButton(apiVersionButtons, "apiVersion", state.apiVersion);
+  setActiveButton(canaryScenarioButtons, "canaryScenario", state.canaryScenario);
+  setActiveButton(canaryHeaderModeButtons, "canaryHeaderMode", state.canaryHeaderMode);
+  setActiveButton(canaryConsumerButtons, "canaryConsumer", state.canaryConsumer);
+  setActiveButton(deprecationCaseButtons, "deprecationCase", state.deprecationCase);
   setActiveButton(resilienceScenarioButtons, "resilienceScenario", state.resilienceScenario);
   updateStaticPreview();
   resetView();
