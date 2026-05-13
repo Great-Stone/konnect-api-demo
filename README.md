@@ -9,6 +9,7 @@ This project is a local demo environment for **Konnect hybrid** scenarios built 
   - [Local Tooling](#local-tooling)
   - [Local Files](#local-files)
 - [Current Scope](#current-scope)
+- [Demo Overview](#demo-overview)
 - [Provisioning Model](#provisioning-model)
 - [Local Runtime Shape](#local-runtime-shape)
 - [Observability Stack](#observability-stack)
@@ -46,6 +47,7 @@ This project is a local demo environment for **Konnect hybrid** scenarios built 
 - An existing Konnect control plane
 - A valid Konnect personal access token
 - Konnect hybrid control plane bootstrap details for the local data plane
+- Once the start up script runs - do set up Metering and Billing as per ![metering & billing](metering-billing-next-steps.md)
 
 ### Local Tooling
 
@@ -79,6 +81,22 @@ This project is a local demo environment for **Konnect hybrid** scenarios built 
 - API deprecation with deprecation headers and sunset enforcement
 - Grafana, Loki, Tempo, and OpenTelemetry Collector for request log and trace visibility
 - Konnect audit log webhook ingestion through ngrok into a dedicated Grafana audit dashboard
+
+## Demo Overview
+
+The images below give a quick overview of the demo experience before you go into the detailed scene-by-scene sections.
+
+### Overview 1
+
+![Demo overview 1](img/0-1.png)
+
+### Overview 2
+
+![Demo overview 2](img/0-2.png)
+
+### Overview 3
+
+![Demo overview 3](img/0-3.png)
 
 ## Provisioning Model
 

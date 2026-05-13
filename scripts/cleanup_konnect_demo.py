@@ -30,6 +30,7 @@ DEMO_SERVICE_NAMES = {
     "svc-orders-deprecation-v1",
     "svc-orders-deprecation-v2",
     "svc-orders-transport-security",
+    "svc-orders-metering",
 }
 
 DEMO_ROUTE_NAMES = {
@@ -62,6 +63,7 @@ DEMO_ROUTE_NAMES = {
     "route-orders-deprecation-sunset",
     "route-orders-http-blocked",
     "route-orders-http-redirect",
+    "route-orders-metering-consumer",
 }
 
 DEMO_UPSTREAM_NAMES = {
@@ -82,6 +84,8 @@ DEMO_CONSUMER_USERNAMES = {
     "keycloak-consumer-2",
     "consumer-pilot",
     "consumer-standard-lifecycle",
+    "demo-bank-1",
+    "demo-bank-2",
 }
 
 DEMO_CONSUMER_CUSTOM_IDS = {
@@ -91,6 +95,8 @@ DEMO_CONSUMER_CUSTOM_IDS = {
     "consumer-2",
     "consumer-pilot",
     "consumer-standard-lifecycle",
+    "demo-bank-1",
+    "demo-bank-2",
 }
 
 

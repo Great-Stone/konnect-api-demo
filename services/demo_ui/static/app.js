@@ -8,6 +8,7 @@ const state = {
   ipPreset: "allowed",
   schemaCase: "valid-request",
   sizeCase: "positive",
+  meteringScenario: "demo-bank-1",
   injectionSubscene: "query-params",
   transportSecurityCase: "http-blocked",
   versionRoutingMode: "path",
@@ -57,6 +58,10 @@ const SCENE_DEFAULTS = {
   "traffic-control-request-size-limiting": {
     controlTitle: "Payload Controls",
     emptyText: "Run the scene to see Kong enforce the request payload size limit before proxying.",
+  },
+  "monetization-metering-billing": {
+    controlTitle: "Monetization Controls",
+    emptyText: "Run the scene to see Kong emit a usage event for the selected authenticated consumer on the single metered route.",
   },
   "transformation-gateway-payload-encryption": {
     controlTitle: "Transformation Controls",
@@ -129,6 +134,7 @@ const elements = {
   ipPresetControls: document.getElementById("ipPresetControls"),
   schemaCaseControls: document.getElementById("schemaCaseControls"),
   sizeCaseControls: document.getElementById("sizeCaseControls"),
+  meteringScenarioControls: document.getElementById("meteringScenarioControls"),
   injectionSubsceneControls: document.getElementById("injectionSubsceneControls"),
   transportSecurityCaseControls: document.getElementById("transportSecurityCaseControls"),
   versionRoutingModeControls: document.getElementById("versionRoutingModeControls"),
@@ -165,6 +171,7 @@ const resilienceScenarioButtons = Array.from(document.querySelectorAll("[data-re
 const ipPresetButtons = Array.from(document.querySelectorAll("[data-ip-preset]"));
 const schemaCaseButtons = Array.from(document.querySelectorAll("[data-schema-case]"));
 const sizeCaseButtons = Array.from(document.querySelectorAll("[data-size-case]"));
+const meteringScenarioButtons = Array.from(document.querySelectorAll("[data-metering-scenario]"));
 const injectionSubsceneButtons = Array.from(document.querySelectorAll("[data-injection-subscene]"));
 const transportSecurityCaseButtons = Array.from(document.querySelectorAll("[data-transport-security-case]"));
 const versionRoutingModeButtons = Array.from(document.querySelectorAll("[data-version-routing-mode]"));
@@ -235,6 +242,15 @@ function computePreviewRows() {
       ["Path", "/orders/limits/request-size"],
       ["Case", state.sizeCase === "positive" ? "does not exceed limit" : "exceeds limit"],
       ["Payload Policy", "2 KB max"],
+    ];
+  }
+  if (state.currentScene === "monetization-metering-billing") {
+    return [
+      ["Method", "GET"],
+      ["Path", "/orders/metering/consumer"],
+      ["Demo Consumer", state.meteringScenario],
+      ["Billable Subject", `Kong Consumer -> ${state.meteringScenario}`],
+      ["Policy", "subject = Kong Consumer"],
     ];
   }
   if (state.currentScene === "transformation-gateway-payload-encryption") {
@@ -391,6 +407,9 @@ function computeExpectedOutcome() {
       ? "Kong should forward the request because the payload stays within the configured 2 KB request-size-limiting threshold."
       : "Kong should reject the request because the body exceeds the configured 2 KB request-size-limiting threshold before the protected API is reached.";
   }
+  if (state.currentScene === "monetization-metering-billing") {
+    return `Kong should emit one usage event per authenticated request and set the billable subject to the resolved Kong Consumer. In this run, subject = Kong Consumer and the billable value is ${state.meteringScenario}.`;
+  }
   if (state.currentScene === "transformation-gateway-payload-encryption") {
     return "Kong should decrypt the inbound request envelope at the custom plugin using the gateway private key, forward plaintext upstream, then encrypt the upstream response with a new AES session key before returning it to the client.";
   }
@@ -492,6 +511,17 @@ function defaultTopologyForScene() {
         kong: ["Gateway", "Kong Data Plane", "2 KB request size limit"],
         east: ["Protected API", "Orders API", "Awaiting size check"],
         west: ["Payload Policy", "Request Size Limit", "Awaiting evaluation"],
+      },
+      nodes: { west: "static" },
+    };
+  }
+  if (state.currentScene === "monetization-metering-billing") {
+    return {
+      labels: {
+        client: ["Client", "Billable Caller", state.meteringScenario],
+        kong: ["Gateway", "Kong Data Plane", "Usage metering plugin"],
+        east: ["Protected API", "Orders API", "Awaiting metered request"],
+        west: ["Usage Event", state.meteringScenario, "Awaiting event"],
       },
       nodes: { west: "static" },
     };
@@ -918,6 +948,7 @@ function updateControlVisibility() {
   const isIpScene = state.currentScene === "network-policy-ip-allow-deny";
   const isSchemaScene = state.currentScene === "data-quality-schema-validation";
   const isSizeScene = state.currentScene === "traffic-control-request-size-limiting";
+  const isMeteringScene = state.currentScene === "monetization-metering-billing";
   const isCryptoScene = state.currentScene === "transformation-gateway-payload-encryption";
   const isInjectionScene = state.currentScene === "security-injection-protection";
   const isTransportSecurityScene = state.currentScene === "transport-security-http-enforcement";
@@ -926,7 +957,7 @@ function updateControlVisibility() {
   const isDeprecationScene = state.currentScene === "api-lifecycle-deprecation";
   elements.headerRoutingControls.classList.toggle(
     "hidden",
-    isRateScene || isResilienceScene || isIdentityScene || isIpScene || isSchemaScene || isSizeScene || isCryptoScene || isInjectionScene || isTransportSecurityScene || isVersionedRoutingScene || isCanaryScene || isDeprecationScene,
+    isRateScene || isResilienceScene || isIdentityScene || isIpScene || isSchemaScene || isSizeScene || isMeteringScene || isCryptoScene || isInjectionScene || isTransportSecurityScene || isVersionedRoutingScene || isCanaryScene || isDeprecationScene,
   );
   elements.rateModeControls.classList.toggle("hidden", !isRateScene);
   elements.rateCounterControls.classList.toggle("hidden", !isRateScene);
@@ -936,6 +967,7 @@ function updateControlVisibility() {
   elements.ipPresetControls.classList.toggle("hidden", !isIpScene);
   elements.schemaCaseControls.classList.toggle("hidden", !isSchemaScene);
   elements.sizeCaseControls.classList.toggle("hidden", !isSizeScene);
+  elements.meteringScenarioControls.classList.toggle("hidden", !isMeteringScene);
   // Crypto scene uses the shared run/reset controls only.
   elements.injectionSubsceneControls.classList.toggle("hidden", !isInjectionScene);
   elements.transportSecurityCaseControls.classList.toggle("hidden", !isTransportSecurityScene);
@@ -1037,6 +1069,9 @@ async function runScenario() {
     } else if (state.currentScene === "traffic-control-request-size-limiting") {
       path = "/api/scenes/request-size/run";
       body = { case: state.sizeCase };
+    } else if (state.currentScene === "monetization-metering-billing") {
+      path = "/api/scenes/metering-billing/run";
+      body = { consumer: state.meteringScenario };
     } else if (state.currentScene === "transformation-gateway-payload-encryption") {
       path = "/api/scenes/payload-crypto/run";
       body = {};
@@ -1420,6 +1455,15 @@ for (const button of sizeCaseButtons) {
   });
 }
 
+for (const button of meteringScenarioButtons) {
+  button.addEventListener("click", () => {
+    state.meteringScenario = button.dataset.meteringScenario;
+    setActiveButton(meteringScenarioButtons, "meteringScenario", state.meteringScenario);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
 for (const button of injectionSubsceneButtons) {
   button.addEventListener("click", () => {
     state.injectionSubscene = button.dataset.injectionSubscene;
@@ -1587,6 +1631,7 @@ loadConfig().then(() => {
   setActiveButton(ipPresetButtons, "ipPreset", state.ipPreset);
   setActiveButton(schemaCaseButtons, "schemaCase", state.schemaCase);
   setActiveButton(sizeCaseButtons, "sizeCase", state.sizeCase);
+  setActiveButton(meteringScenarioButtons, "meteringScenario", state.meteringScenario);
   setActiveButton(injectionSubsceneButtons, "injectionSubscene", state.injectionSubscene);
   setActiveButton(transportSecurityCaseButtons, "transportSecurityCase", state.transportSecurityCase);
   setActiveButton(versionRoutingModeButtons, "versionRoutingMode", state.versionRoutingMode);

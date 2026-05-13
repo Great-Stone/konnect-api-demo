@@ -220,6 +220,28 @@ SCENES = {
             "Positive and negative requests use the same route so the customer can see the exact enforcement boundary.",
         ],
     },
+    "monetization-metering-billing": {
+        "id": "monetization-metering-billing",
+        "label": "Monetization: Usage Metering",
+        "title": "Usage Metering",
+        "services": ["svc-orders-metering"],
+        "routes": ["route-orders-metering-consumer"],
+        "plugins": [
+            "usage metering plugin on route-orders-metering-consumer",
+            "key-auth on route-orders-metering-consumer",
+        ],
+        "consumers": ["demo-bank-1", "demo-bank-2"],
+        "controlPlane": "Konnect control plane",
+        "dataPlane": "Local hybrid data plane",
+        "publicPath": "/orders/metering/consumer",
+        "routingHeader": "apikey",
+        "architecture": [
+            "Kong meters real API requests on a single route using the route-scoped usage metering plugin.",
+            "The authenticated Kong Consumer becomes the billable subject for each request.",
+            "The scene keeps the gateway side simple by using one metered route and two named demo consumers.",
+        ],
+        "scenarios": ["consumer-based"],
+    },
     "transformation-gateway-payload-encryption": {
         "id": "transformation-gateway-payload-encryption",
         "label": "Transformation: Gateway Payload Encryption/Decryption",
@@ -468,6 +490,37 @@ REQUEST_SIZE_CASES = {
         "path": "/orders/limits/request-size",
         "headers": {"Content-Type": "application/json"},
         "body": {"payload": "x" * 2600},
+    },
+}
+
+METERING_CONSUMERS = {
+    "demo-bank-1": {
+        "path": "/orders/metering/consumer",
+        "method": "GET",
+        "headers": {
+            "Accept": "application/json",
+            "apikey": "key-demo-bank-1",
+        },
+        "route": "route-orders-metering-consumer",
+        "service": "svc-orders-metering",
+        "subject": "demo-bank-1",
+        "subject_source": "consumer",
+        "dimensions": {},
+        "policy": "consumer subject",
+    },
+    "demo-bank-2": {
+        "path": "/orders/metering/consumer",
+        "method": "GET",
+        "headers": {
+            "Accept": "application/json",
+            "apikey": "key-demo-bank-2",
+        },
+        "route": "route-orders-metering-consumer",
+        "service": "svc-orders-metering",
+        "subject": "demo-bank-2",
+        "subject_source": "consumer",
+        "dimensions": {},
+        "policy": "consumer subject",
     },
 }
 
@@ -1116,6 +1169,9 @@ class DemoHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/scenes/request-size/run":
             self.handle_run_request_size()
+            return
+        if self.path == "/api/scenes/metering-billing/run":
+            self.handle_run_metering_billing()
             return
         if self.path == "/api/scenes/payload-crypto/run":
             self.handle_run_payload_crypto()
@@ -2100,6 +2156,132 @@ class DemoHandler(BaseHTTPRequestHandler):
                     "statusKong": "Kong Accepted Request" if allowed else "Kong Rejected Payload",
                     "statusKongClass": "success" if allowed else "error",
                     "statusRoute": case_label,
+                    "statusRouteClass": "success" if allowed else "error",
+                },
+                "architecture": scene["architecture"],
+            }
+        )
+
+    def handle_run_metering_billing(self):
+        scene = SCENES["monetization-metering-billing"]
+        body = self.read_json()
+        consumer = body.get("consumer", "demo-bank-1")
+        config = METERING_CONSUMERS.get(consumer, METERING_CONSUMERS["demo-bank-1"])
+
+        target_url = f"{KONG_PROXY_URL}{config['path']}"
+        req_headers = dict(config["headers"])
+        req_headers["x-request-id"] = str(uuid.uuid4())
+
+        response = request_through_kong(target_url, req_headers, method=config["method"])
+        response_status = response["status"]
+        allowed = response_status == 200
+        selected_service = response["body"].get("service") if isinstance(response["body"], dict) else None
+        dimensions = dict(config["dimensions"])
+
+        expected_outcome = "Kong should meter one usage event per authenticated request and use the resolved Kong Consumer as the billable subject."
+
+        self.respond_json(
+            {
+                "scene": scene["id"],
+                "sceneDetails": scene,
+                "requestPreview": [
+                    ("Method", config["method"]),
+                    ("Path", config["path"]),
+                    ("Demo Consumer", consumer),
+                    ("Billable Subject", f"{config['subject_source']} -> {config['subject']}"),
+                ],
+                "expectedOutcome": expected_outcome,
+                "result": {
+                    "status": response_status,
+                    "routeMatched": config["route"],
+                    "kongServiceMatched": config["service"],
+                    "pluginApplied": f"usage metering plugin ({config['policy']})",
+                    "selectedService": selected_service,
+                    "responseBody": response["body"],
+                    "responseHeaders": response["headers"],
+                    "billableSubject": config["subject"],
+                    "subjectSource": config["subject_source"],
+                    "dimensions": dimensions,
+                    "consumer": consumer,
+                },
+                "consoleView": {
+                    "request": {
+                        "method": config["method"],
+                        "endpoint": target_url,
+                        "headers": req_headers,
+                        "body": None,
+                    },
+                    "response": {
+                        "status": response_status,
+                        "headers": response["headers"],
+                        "body": response["body"],
+                    },
+                },
+                "detailView": {
+                    "entities": normalize_detail_entities(
+                        [
+                            ("Kong Route", config["route"]),
+                            ("Kong Service", config["service"]),
+                            ("Plugin Scope", "route-scoped usage metering plugin"),
+                            ("Ingest Endpoint", "https://us.api.konghq.com/v3/openmeter/events"),
+                            ("Billable Subject", config["subject"]),
+                            ("Subject Resolution", config["subject_source"]),
+                            (
+                                "Billing Dimensions",
+                                ", ".join(f"{key}={value}" for key, value in dimensions.items()) if dimensions else "none",
+                            ),
+                            ("Actual Service Name", selected_service or "No upstream call"),
+                        ]
+                    ),
+                    "curl": build_curl_command(target_url, req_headers, method=config["method"]),
+                    "steps": [
+                        {
+                            "title": "Metered API Request",
+                            "command": build_curl_command(target_url, req_headers, method=config["method"]),
+                            "response": {
+                                "status": response_status,
+                                "headers": response["headers"],
+                                "body": response["body"],
+                                "metering": {
+                                    "subject": config["subject"],
+                                    "subject_source": config["subject_source"],
+                                    "dimensions": dimensions,
+                                    "event_type": "request",
+                                    "ingest_endpoint": "https://us.api.konghq.com/v3/openmeter/events",
+                                },
+                            },
+                        }
+                    ],
+                    "response": {
+                        "status": response_status,
+                        "headers": response["headers"],
+                        "body": response["body"],
+                    },
+                },
+                "topology": {
+                    "labels": {
+                        "client": ("Client", "Billable Caller", scenario.replace("-", " ")),
+                        "kong": ("Gateway", "Kong Data Plane", "Metering & Billing plugin"),
+                        "east": ("Protected API", "Orders API", "Reached" if allowed else "Not reached"),
+                        "west": (
+                            "Billing Event",
+                            config["subject"],
+                            ", ".join(f"{key}={value}" for key, value in dimensions.items()) if dimensions else "no extra dimensions",
+                        ),
+                    },
+                    "nodes": {
+                        "kong": "active" if allowed else "error",
+                        "east": "active" if allowed else None,
+                        "west": "active" if allowed else None,
+                    },
+                    "connectors": {
+                        "clientKong": "active",
+                        "kongEast": "active" if allowed else None,
+                        "kongWest": "active" if allowed else None,
+                    },
+                    "statusKong": "Usage Event Emitted" if allowed else f"HTTP {response_status}",
+                    "statusKongClass": "success" if allowed else "error",
+                    "statusRoute": config["route"],
                     "statusRouteClass": "success" if allowed else "error",
                 },
                 "architecture": scene["architecture"],

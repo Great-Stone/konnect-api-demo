@@ -16,6 +16,19 @@ variable "konnect_control_plane_id" {
   type        = string
 }
 
+variable "konnect_system_token" {
+  description = "Konnect system account token used by the Metering and Billing plugin ingest path"
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "konnect_metering_ingest_endpoint" {
+  description = "Konnect Metering and Billing ingest endpoint"
+  type        = string
+  default     = "https://us.api.konghq.com/v3/openmeter/events"
+}
+
 variable "azure_ad_tenant_id" {
   description = "Azure AD tenant ID"
   type        = string

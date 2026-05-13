@@ -109,6 +109,8 @@ fi
 
 echo "Applying Konnect control plane configuration"
 TF_VAR_konnect_control_plane_id="$KONNECT_CP_ID" \
+TF_VAR_konnect_system_token="${KONNECT_SYSTEM_TOKEN:-}" \
+TF_VAR_konnect_metering_ingest_endpoint="${KONNECT_METERING_INGEST_ENDPOINT:-https://us.api.konghq.com/v3/openmeter/events}" \
 TF_VAR_azure_ad_tenant_id="${AD_PROTECTED_API_TENANT_ID:-}" \
 TF_VAR_azure_ad_audience="${AD_PROTECTED_API_AUDIENCE:-}" \
 TF_VAR_azure_ad_consumer1_client_id="${AD_CONSUMER1_CLIENT_ID:-}" \
