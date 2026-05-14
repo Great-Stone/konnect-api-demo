@@ -9,6 +9,8 @@ const state = {
   schemaCase: "valid-request",
   sizeCase: "positive",
   meteringScenario: "demo-bank-1",
+  datakitScenario: "fallback",
+  datakitFallbackMode: "api1-success",
   injectionSubscene: "query-params",
   transportSecurityCase: "http-blocked",
   versionRoutingMode: "path",
@@ -62,6 +64,10 @@ const SCENE_DEFAULTS = {
   "monetization-metering-billing": {
     controlTitle: "Monetization Controls",
     emptyText: "Run the scene to see Kong emit a usage event for the selected authenticated consumer on the single metered route.",
+  },
+  "datakit-plugin-orchestration": {
+    controlTitle: "DataKit Controls",
+    emptyText: "Run the scene to see Keycloak-protected Datakit orchestration: conditional fallback, account correlation, or Redis-backed caching with a 30-second TTL.",
   },
   "transformation-gateway-payload-encryption": {
     controlTitle: "Transformation Controls",
@@ -135,6 +141,8 @@ const elements = {
   schemaCaseControls: document.getElementById("schemaCaseControls"),
   sizeCaseControls: document.getElementById("sizeCaseControls"),
   meteringScenarioControls: document.getElementById("meteringScenarioControls"),
+  datakitScenarioControls: document.getElementById("datakitScenarioControls"),
+  datakitFallbackModeControls: document.getElementById("datakitFallbackModeControls"),
   injectionSubsceneControls: document.getElementById("injectionSubsceneControls"),
   transportSecurityCaseControls: document.getElementById("transportSecurityCaseControls"),
   versionRoutingModeControls: document.getElementById("versionRoutingModeControls"),
@@ -172,6 +180,8 @@ const ipPresetButtons = Array.from(document.querySelectorAll("[data-ip-preset]")
 const schemaCaseButtons = Array.from(document.querySelectorAll("[data-schema-case]"));
 const sizeCaseButtons = Array.from(document.querySelectorAll("[data-size-case]"));
 const meteringScenarioButtons = Array.from(document.querySelectorAll("[data-metering-scenario]"));
+const datakitScenarioButtons = Array.from(document.querySelectorAll("[data-datakit-scenario]"));
+const datakitFallbackModeButtons = Array.from(document.querySelectorAll("[data-datakit-fallback-mode]"));
 const injectionSubsceneButtons = Array.from(document.querySelectorAll("[data-injection-subscene]"));
 const transportSecurityCaseButtons = Array.from(document.querySelectorAll("[data-transport-security-case]"));
 const versionRoutingModeButtons = Array.from(document.querySelectorAll("[data-version-routing-mode]"));
@@ -251,6 +261,30 @@ function computePreviewRows() {
       ["Demo Consumer", state.meteringScenario],
       ["Billable Subject", `Kong Consumer -> ${state.meteringScenario}`],
       ["Policy", "subject = Kong Consumer"],
+    ];
+  }
+  if (state.currentScene === "datakit-plugin-orchestration") {
+    if (state.datakitScenario === "fallback") {
+      return [
+        ["Method", "GET"],
+        ["Path", "/orders/datakit/fallback"],
+        ["Branch", state.datakitFallbackMode === "api1-success" ? "API1 returns 200" : "API1 returns non-200"],
+        ["Auth", "Keycloak JWT + x-authenticated-role"],
+      ];
+    }
+    if (state.datakitScenario === "combine") {
+      return [
+        ["Method", "GET"],
+        ["Path", "/orders/datakit/combine"],
+        ["Join", "API1 list + API2 details"],
+        ["Join Key", "accountId"],
+      ];
+    }
+    return [
+      ["Method", "GET"],
+      ["Path", "/orders/datakit/cache"],
+      ["Cache Backend", "Redis via DataKit"],
+      ["Cache TTL", "30 seconds"],
     ];
   }
   if (state.currentScene === "transformation-gateway-payload-encryption") {
@@ -410,6 +444,15 @@ function computeExpectedOutcome() {
   if (state.currentScene === "monetization-metering-billing") {
     return `Kong should emit one usage event per authenticated request and set the billable subject to the resolved Kong Consumer. In this run, subject = Kong Consumer and the billable value is ${state.meteringScenario}.`;
   }
+  if (state.currentScene === "datakit-plugin-orchestration") {
+    if (state.datakitScenario === "fallback") {
+      return "Kong should validate the Keycloak bearer token first. Datakit should return API1 when API1 returns 200, and should call API2 only when API1 returns a non-200 response.";
+    }
+    if (state.datakitScenario === "combine") {
+      return "Kong should validate the Keycloak bearer token first. Datakit should call API1 for the account list, call API2 for detail records, and join the two payloads on accountId before returning the composed response.";
+    }
+    return "Kong should validate the Keycloak bearer token first. Datakit should read Redis-backed cache, populate it on a miss, and serve the cached payload for the full 30-second TTL window.";
+  }
   if (state.currentScene === "transformation-gateway-payload-encryption") {
     return "Kong should decrypt the inbound request envelope at the custom plugin using the gateway private key, forward plaintext upstream, then encrypt the upstream response with a new AES session key before returning it to the client.";
   }
@@ -522,6 +565,29 @@ function defaultTopologyForScene() {
         kong: ["Gateway", "Kong Data Plane", "Usage metering plugin"],
         east: ["Protected API", "Orders API", "Awaiting metered request"],
         west: ["Usage Event", state.meteringScenario, "Awaiting event"],
+      },
+      nodes: { west: "static" },
+    };
+  }
+  if (state.currentScene === "datakit-plugin-orchestration") {
+    return {
+      labels: {
+        client: ["Client", "Keycloak Authenticated Caller", "consumer-1"],
+        kong: ["Gateway", "Kong Data Plane", `DataKit ${state.datakitScenario}`],
+        east: [
+          "API1",
+          "Primary Upstream",
+          state.datakitScenario === "combine" ? "account list" : state.datakitScenario === "cache" ? "cache source" : "primary decision",
+        ],
+        west: [
+          state.datakitScenario === "cache" ? "Redis Cache" : "API2",
+          state.datakitScenario === "cache" ? "DataKit cache store" : "Secondary Upstream",
+          state.datakitScenario === "combine"
+            ? "detail records"
+            : state.datakitScenario === "cache"
+              ? "TTL 30 seconds"
+              : "fallback target",
+        ],
       },
       nodes: { west: "static" },
     };
@@ -949,6 +1015,7 @@ function updateControlVisibility() {
   const isSchemaScene = state.currentScene === "data-quality-schema-validation";
   const isSizeScene = state.currentScene === "traffic-control-request-size-limiting";
   const isMeteringScene = state.currentScene === "monetization-metering-billing";
+  const isDatakitScene = state.currentScene === "datakit-plugin-orchestration";
   const isCryptoScene = state.currentScene === "transformation-gateway-payload-encryption";
   const isInjectionScene = state.currentScene === "security-injection-protection";
   const isTransportSecurityScene = state.currentScene === "transport-security-http-enforcement";
@@ -957,7 +1024,7 @@ function updateControlVisibility() {
   const isDeprecationScene = state.currentScene === "api-lifecycle-deprecation";
   elements.headerRoutingControls.classList.toggle(
     "hidden",
-    isRateScene || isResilienceScene || isIdentityScene || isIpScene || isSchemaScene || isSizeScene || isMeteringScene || isCryptoScene || isInjectionScene || isTransportSecurityScene || isVersionedRoutingScene || isCanaryScene || isDeprecationScene,
+    isRateScene || isResilienceScene || isIdentityScene || isIpScene || isSchemaScene || isSizeScene || isMeteringScene || isDatakitScene || isCryptoScene || isInjectionScene || isTransportSecurityScene || isVersionedRoutingScene || isCanaryScene || isDeprecationScene,
   );
   elements.rateModeControls.classList.toggle("hidden", !isRateScene);
   elements.rateCounterControls.classList.toggle("hidden", !isRateScene);
@@ -968,6 +1035,8 @@ function updateControlVisibility() {
   elements.schemaCaseControls.classList.toggle("hidden", !isSchemaScene);
   elements.sizeCaseControls.classList.toggle("hidden", !isSizeScene);
   elements.meteringScenarioControls.classList.toggle("hidden", !isMeteringScene);
+  elements.datakitScenarioControls.classList.toggle("hidden", !isDatakitScene);
+  elements.datakitFallbackModeControls.classList.toggle("hidden", !isDatakitScene || state.datakitScenario !== "fallback");
   // Crypto scene uses the shared run/reset controls only.
   elements.injectionSubsceneControls.classList.toggle("hidden", !isInjectionScene);
   elements.transportSecurityCaseControls.classList.toggle("hidden", !isTransportSecurityScene);
@@ -1072,6 +1141,9 @@ async function runScenario() {
     } else if (state.currentScene === "monetization-metering-billing") {
       path = "/api/scenes/metering-billing/run";
       body = { consumer: state.meteringScenario };
+    } else if (state.currentScene === "datakit-plugin-orchestration") {
+      path = "/api/scenes/datakit/run";
+      body = { scenario: state.datakitScenario, fallbackMode: state.datakitFallbackMode };
     } else if (state.currentScene === "transformation-gateway-payload-encryption") {
       path = "/api/scenes/payload-crypto/run";
       body = {};
@@ -1309,6 +1381,10 @@ function getCurrentRequestId() {
   return headers["x-request-id"] || headers["X-Request-Id"] || null;
 }
 
+function getCurrentTraceId() {
+  return state.lastRun?.traceId || state.lastRun?.result?.traceId || state.lastRun?.detailView?.traceId || null;
+}
+
 function getTraceUrl() {
   let baseUrl = state.links.trace;
   if (!baseUrl || baseUrl === "#") {
@@ -1326,6 +1402,12 @@ function getTraceUrl() {
     // keep original URL if parsing fails
   }
   const requestId = getCurrentRequestId();
+  const traceId = getCurrentTraceId();
+  const query = traceId
+    ? traceId
+    : requestId
+      ? `{ span."request.id" = "${requestId}" }`
+      : '{ span."request.id" = "your-request-id" }';
   const url = new URL(baseUrl, window.location.origin);
   const paneState = {
     trace: {
@@ -1333,8 +1415,9 @@ function getTraceUrl() {
       queries: [
         {
           refId: "A",
-          queryType: "traceql",
-          query: requestId ? `{ span."request.id" = "${requestId}" }` : '{ span."request.id" = "your-request-id" }',
+          datasource: { uid: "tempo", type: "tempo" },
+          ...(traceId ? {} : { queryType: "traceql" }),
+          query,
         },
       ],
       range: {
@@ -1348,6 +1431,9 @@ function getTraceUrl() {
   url.searchParams.set("orgId", "1");
   if (requestId) {
     url.searchParams.set("request_id", requestId);
+  }
+  if (traceId) {
+    url.searchParams.set("trace_id", traceId);
   }
   return url.toString();
 }
@@ -1459,6 +1545,25 @@ for (const button of meteringScenarioButtons) {
   button.addEventListener("click", () => {
     state.meteringScenario = button.dataset.meteringScenario;
     setActiveButton(meteringScenarioButtons, "meteringScenario", state.meteringScenario);
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of datakitScenarioButtons) {
+  button.addEventListener("click", () => {
+    state.datakitScenario = button.dataset.datakitScenario;
+    setActiveButton(datakitScenarioButtons, "datakitScenario", state.datakitScenario);
+    updateControlVisibility();
+    updateStaticPreview();
+    resetView();
+  });
+}
+
+for (const button of datakitFallbackModeButtons) {
+  button.addEventListener("click", () => {
+    state.datakitFallbackMode = button.dataset.datakitFallbackMode;
+    setActiveButton(datakitFallbackModeButtons, "datakitFallbackMode", state.datakitFallbackMode);
     updateStaticPreview();
     resetView();
   });
@@ -1632,6 +1737,8 @@ loadConfig().then(() => {
   setActiveButton(schemaCaseButtons, "schemaCase", state.schemaCase);
   setActiveButton(sizeCaseButtons, "sizeCase", state.sizeCase);
   setActiveButton(meteringScenarioButtons, "meteringScenario", state.meteringScenario);
+  setActiveButton(datakitScenarioButtons, "datakitScenario", state.datakitScenario);
+  setActiveButton(datakitFallbackModeButtons, "datakitFallbackMode", state.datakitFallbackMode);
   setActiveButton(injectionSubsceneButtons, "injectionSubscene", state.injectionSubscene);
   setActiveButton(transportSecurityCaseButtons, "transportSecurityCase", state.transportSecurityCase);
   setActiveButton(versionRoutingModeButtons, "versionRoutingMode", state.versionRoutingMode);

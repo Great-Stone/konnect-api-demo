@@ -4,6 +4,7 @@
 !keycloak-setup.md
 !azure-ad-setup.md
 !metering-billing-next-steps.md
+!mock-services-reference.md
 
 terraform/konnect/.terraform/
 terraform/konnect/terraform.tfstate

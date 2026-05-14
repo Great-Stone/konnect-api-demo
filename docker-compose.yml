@@ -132,6 +132,33 @@ services:
     volumes:
       - ./services/mock_upstream:/app:ro
 
+  datakit-api1:
+    image: python:3.13-slim
+    container_name: tcs-datakit-api1
+    working_dir: /app
+    command: ["python", "-u", "server.py", "--service", "datakit-api1", "--region", "datakit", "--port", "9401"]
+    ports:
+      - "9401:9401"
+    volumes:
+      - ./services/mock_upstream:/app:ro
+
+  datakit-api2:
+    image: python:3.13-slim
+    container_name: tcs-datakit-api2
+    working_dir: /app
+    command: ["python", "-u", "server.py", "--service", "datakit-api2", "--region", "datakit", "--port", "9402"]
+    ports:
+      - "9402:9402"
+    volumes:
+      - ./services/mock_upstream:/app:ro
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: tcs-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.0
     container_name: tcs-keycloak
@@ -279,3 +306,6 @@ services:
       - grafana
       - konnect-audit-receiver
       - crypto-helper
+      - datakit-api1
+      - datakit-api2
+      - redis

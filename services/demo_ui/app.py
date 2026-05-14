@@ -18,6 +18,7 @@ STATIC_DIR = APP_DIR / "static"
 IMG_DIR = Path("/img")
 KONG_PROXY_URL = os.environ.get("KONG_PROXY_URL", "http://localhost:8000")
 KONG_TLS_PROXY_URL = os.environ.get("KONG_TLS_PROXY_URL", "https://kong-dp:8443")
+LOKI_QUERY_URL = os.environ.get("LOKI_QUERY_URL", "http://loki:3100/loki/api/v1/query")
 DEMO_LOGS_URL = os.environ.get(
     "DEMO_LOGS_URL",
     "https://cloud.konghq.com/us/analytics/dashboards/85891a7b-d91e-4548-ba83-f82cd561342d",
@@ -241,6 +242,39 @@ SCENES = {
             "The scene keeps the gateway side simple by using one metered route and two named demo consumers.",
         ],
         "scenarios": ["consumer-based"],
+    },
+    "datakit-plugin-orchestration": {
+        "id": "datakit-plugin-orchestration",
+        "label": "DataKit: Plugin Orchestration",
+        "title": "DataKit Plugin Orchestration",
+        "services": [
+            "svc-datakit-fallback",
+            "svc-datakit-combine",
+            "svc-datakit-cache",
+        ],
+        "routes": [
+            "route-datakit-fallback",
+            "route-datakit-combine",
+            "route-datakit-cache",
+        ],
+        "plugins": [
+            "openid-connect on DataKit routes",
+            "datakit on route-datakit-fallback",
+            "datakit on route-datakit-combine",
+            "datakit on route-datakit-cache",
+        ],
+        "controlPlane": "Konnect control plane",
+        "dataPlane": "Local hybrid data plane",
+        "publicPath": "/orders/datakit/fallback | /orders/datakit/combine | /orders/datakit/cache",
+        "routingHeader": "authorization",
+        "identityProvider": "Keycloak",
+        "consumers": ["consumer-1"],
+        "architecture": [
+            "All three routes are protected by Keycloak bearer-token validation at Kong before the Datakit flow is allowed to execute.",
+            "All three scenarios use Datakit callout nodes: conditional fallback, cross-API join on accountId, and Redis-backed cache lookup with a 30-second TTL.",
+            "Each route returns the authenticated role in x-authenticated-role so the client can see which token role Kong accepted for the request.",
+        ],
+        "scenarios": ["fallback", "combine", "cache"],
     },
     "transformation-gateway-payload-encryption": {
         "id": "transformation-gateway-payload-encryption",
@@ -524,6 +558,31 @@ METERING_CONSUMERS = {
     },
 }
 
+DATAKIT_SCENARIOS = {
+    "fallback": {
+        "path": "/orders/datakit/fallback",
+        "route": "route-datakit-fallback",
+        "service": "svc-datakit-fallback",
+        "method": "GET",
+        "label": "Conditional Fallback",
+    },
+    "combine": {
+        "path": "/orders/datakit/combine",
+        "route": "route-datakit-combine",
+        "service": "svc-datakit-combine",
+        "method": "GET",
+        "label": "Combine Results",
+    },
+    "cache": {
+        "path": "/orders/datakit/cache",
+        "route": "route-datakit-cache",
+        "service": "svc-datakit-cache",
+        "method": "GET",
+        "label": "Redis Cache",
+        "ttl_seconds": 30,
+    },
+}
+
 INJECTION_CASES = {
     "query-params": {
         "method": "GET",
@@ -651,6 +710,72 @@ def sanitize_headers(headers):
 
 def normalize_detail_entities(items):
     return [[label, value if value not in (None, "") else "None"] for label, value in items]
+
+
+def lookup_trace_id_for_request(request_id: str, attempts: int = 5, delay_seconds: float = 0.5) -> str | None:
+    if not request_id:
+        return None
+    query = (
+        '{service_name="kong-data-plane"} | log_type="access" '
+        f'| request_id="{request_id}" | line_format "{{{{.trace_id}}}}"'
+    )
+    for attempt in range(attempts):
+        try:
+            url = f"{LOKI_QUERY_URL}?{urllib.parse.urlencode({'query': query})}"
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=3, context=ssl._create_unverified_context()) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            results = (((payload or {}).get("data") or {}).get("result")) or []
+            for stream in results:
+                for value in stream.get("values", []):
+                    if len(value) >= 2:
+                        trace_id = (value[1] or "").strip()
+                        if trace_id and trace_id != "null":
+                            return trace_id
+        except Exception:
+            pass
+        if attempt < attempts - 1:
+            time.sleep(delay_seconds)
+    return None
+
+
+def enrich_payload_with_trace(payload):
+    if not isinstance(payload, dict):
+        return payload
+
+    console_view = payload.get("consoleView")
+    if not isinstance(console_view, dict):
+        return payload
+
+    request_view = console_view.get("request")
+    if not isinstance(request_view, dict):
+        return payload
+
+    headers = request_view.get("headers") or {}
+    if not isinstance(headers, dict):
+        return payload
+
+    request_id = headers.get("x-request-id") or headers.get("X-Request-Id")
+    if not request_id:
+        return payload
+
+    trace_id = lookup_trace_id_for_request(request_id)
+    if not trace_id:
+        return payload
+
+    payload["requestId"] = request_id
+    payload["traceId"] = trace_id
+
+    result = payload.get("result")
+    if isinstance(result, dict):
+        result["requestId"] = request_id
+        result["traceId"] = trace_id
+
+    detail_view = payload.get("detailView")
+    if isinstance(detail_view, dict):
+        detail_view["traceId"] = trace_id
+
+    return payload
 
 
 def docker_api_request(method, path, body=b""):
@@ -1076,6 +1201,22 @@ def consumer_mapping_description(idp_name):
     return "No consumer mapping"
 
 
+def generate_keycloak_access_token(consumer="consumer-1"):
+    client_id = KEYCLOAK_CONSUMER1_CLIENT_ID if consumer == "consumer-1" else KEYCLOAK_CONSUMER2_CLIENT_ID
+    client_secret = KEYCLOAK_CONSUMER1_SECRET if consumer == "consumer-1" else KEYCLOAK_CONSUMER2_SECRET
+    token_url = f"{KEYCLOAK_INTERNAL_BASE_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
+    response = post_form(
+        token_url,
+        {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "client_credentials",
+        },
+    )
+    token = response["body"].get("access_token", "") if isinstance(response["body"], dict) else ""
+    return token, response
+
+
 class DemoHandler(BaseHTTPRequestHandler):
     server_version = "TcsKongDemo/1.0"
 
@@ -1172,6 +1313,9 @@ class DemoHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/scenes/metering-billing/run":
             self.handle_run_metering_billing()
+            return
+        if self.path == "/api/scenes/datakit/run":
+            self.handle_run_datakit()
             return
         if self.path == "/api/scenes/payload-crypto/run":
             self.handle_run_payload_crypto()
@@ -1684,20 +1828,10 @@ class DemoHandler(BaseHTTPRequestHandler):
     def handle_generate_keycloak_token(self):
         body = self.read_json()
         consumer = body.get("consumer", "consumer-1")
-        client_id = KEYCLOAK_CONSUMER1_CLIENT_ID if consumer == "consumer-1" else KEYCLOAK_CONSUMER2_CLIENT_ID
-        client_secret = KEYCLOAK_CONSUMER1_SECRET if consumer == "consumer-1" else KEYCLOAK_CONSUMER2_SECRET
-        token_url = f"{KEYCLOAK_INTERNAL_BASE_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
-        response = post_form(
-            token_url,
-            {
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "grant_type": "client_credentials",
-            },
-        )
+        token, response = generate_keycloak_access_token(consumer)
         self.respond_json(
             {
-                "token": response["body"].get("access_token", ""),
+                "token": token,
                 "tokenResponse": response["body"],
                 "idp": "Keycloak",
                 "consumer": consumer,
@@ -2260,7 +2394,7 @@ class DemoHandler(BaseHTTPRequestHandler):
                 },
                 "topology": {
                     "labels": {
-                        "client": ("Client", "Billable Caller", scenario.replace("-", " ")),
+                        "client": ("Client", "Billable Caller", consumer),
                         "kong": ("Gateway", "Kong Data Plane", "Metering & Billing plugin"),
                         "east": ("Protected API", "Orders API", "Reached" if allowed else "Not reached"),
                         "west": (
@@ -2283,6 +2417,217 @@ class DemoHandler(BaseHTTPRequestHandler):
                     "statusKongClass": "success" if allowed else "error",
                     "statusRoute": config["route"],
                     "statusRouteClass": "success" if allowed else "error",
+                },
+                "architecture": scene["architecture"],
+            }
+        )
+
+    def handle_run_datakit(self):
+        scene = SCENES["datakit-plugin-orchestration"]
+        body = self.read_json()
+        scenario = body.get("scenario", "fallback")
+        fallback_mode = body.get("fallbackMode", "api1-success")
+        config = DATAKIT_SCENARIOS.get(scenario, DATAKIT_SCENARIOS["fallback"])
+        token, token_response = generate_keycloak_access_token("consumer-1")
+        if not token:
+            self.respond_json(
+                {
+                    "error": "Failed to obtain Keycloak token for Datakit scene.",
+                    "tokenResponse": token_response["body"],
+                },
+                status=HTTPStatus.BAD_GATEWAY,
+            )
+            return
+
+        target_url = f"{KONG_PROXY_URL}{config['path']}"
+        if scenario == "fallback":
+            mode = "success" if fallback_mode == "api1-success" else "fail"
+            target_url = f"{target_url}?mode={mode}"
+
+        req_headers = build_bearer_headers(token)
+        response = request_through_kong(target_url, req_headers, method=config["method"])
+        response_status = response["status"]
+        response_body = response["body"] if isinstance(response["body"], dict) else {}
+        selected_role = response["headers"].get("x-authenticated-role", "unknown")
+        fallback_decision = response["headers"].get("x-datakit-decision", "unknown")
+        selected_service = response_body.get("result", {}).get("source") if scenario == "fallback" else None
+        if scenario == "combine":
+            selected_service = "api1 + api2"
+        if scenario == "cache":
+            selected_service = response_body.get("source")
+
+        if scenario == "fallback":
+            expected_outcome = (
+                "Datakit should call API1 through a wrapper callout node. "
+                "The wrapper always returns HTTP 200 to Datakit, but carries API1's original status in the payload. "
+                "If the original API1 status is 200, Datakit returns the API1 response. "
+                "If the original API1 status is non-200, Datakit calls API2 and returns the API2 response instead."
+            )
+            request_preview = [
+                ("Method", "GET"),
+                ("Path", "/orders/datakit/fallback"),
+                ("Fallback Mode", "API1 success" if fallback_mode == "api1-success" else "API1 non-200"),
+                ("API1 Original Status", "200" if fallback_mode == "api1-success" else "503"),
+                ("JWT Auth", "Keycloak bearer token (consumer-1)"),
+            ]
+            detail_entities = [
+                ("Kong Route", config["route"]),
+                ("Kong Service", config["service"]),
+                ("Kong Plugins", "openid-connect + datakit"),
+                ("Flow", "call API1 wrapper -> inspect original API1 status -> optionally call API2"),
+                ("Execution Model", "API1 wrapper and API2 are both Datakit call nodes"),
+                ("API1 Returns 200 When", "Fallback Mode is set to API1 success"),
+                ("API1 Returns 503 When", "Fallback Mode is set to API1 non-200"),
+                ("Branch Condition", "API1 originalStatus == 200"),
+                ("Fallback Trigger", "API1 originalStatus != 200"),
+                ("Returned Role Header", f"x-authenticated-role: {selected_role}"),
+                ("Decision", fallback_decision),
+            ]
+        elif scenario == "combine":
+            expected_outcome = (
+                "Datakit should call API1 for the account list, call API2 for the account details, "
+                "join the two payloads on accountId, and return one composed response."
+            )
+            request_preview = [
+                ("Method", "GET"),
+                ("Path", "/orders/datakit/combine"),
+                ("Join Key", "accountId"),
+                ("JWT Auth", "Keycloak bearer token (consumer-1)"),
+            ]
+            detail_entities = [
+                ("Kong Route", config["route"]),
+                ("Kong Service", config["service"]),
+                ("Kong Plugins", "openid-connect + datakit"),
+                ("Join Key", "accountId"),
+                ("Account Count", str(len(response_body.get("accounts", [])))),
+            ]
+        else:
+            ttl_seconds = config["ttl_seconds"]
+            expected_outcome = (
+                f"Datakit should look up Redis first. On a miss, it should fetch fresh data, cache it with a {ttl_seconds}-second TTL, "
+                f"and return the fresh payload. During the {ttl_seconds}-second TTL window, Datakit should serve the cached payload unchanged."
+            )
+            request_preview = [
+                ("Method", "GET"),
+                ("Path", "/orders/datakit/cache"),
+                ("Cache Strategy", "Redis-backed DataKit cache"),
+                ("Cache TTL", f"{ttl_seconds} seconds"),
+            ]
+            detail_entities = [
+                ("Kong Route", config["route"]),
+                ("Kong Service", config["service"]),
+                ("Kong Plugins", "openid-connect + datakit"),
+                ("Cache Backend", "Redis"),
+                ("Cache TTL", f"{ttl_seconds} seconds"),
+                ("Cache Status", response["headers"].get("x-cache-status", "unknown")),
+            ]
+
+        if scenario == "fallback":
+            east_state = "active" if fallback_decision == "api1-success" else "error" if fallback_decision == "api2-fallback" else "active"
+            west_state = "active" if fallback_decision == "api2-fallback" else None
+            east_connector = "active"
+            west_connector = "active" if fallback_decision == "api2-fallback" else None
+            west_detail = "fallback target" if fallback_decision == "api2-fallback" else "not used"
+        elif scenario == "cache":
+            cache_status = response["headers"].get("x-cache-status", "unknown")
+            east_state = None if cache_status == "HIT" else "active" if response_status == 200 else None
+            west_state = "active" if response_status == 200 else None
+            east_connector = None if cache_status == "HIT" else "active" if response_status == 200 else None
+            west_connector = "active" if response_status == 200 else None
+            west_detail = f"Redis cache TTL {config['ttl_seconds']}s"
+        else:
+            east_state = "active" if response_status == 200 else None
+            west_state = "active" if response_status == 200 else None
+            east_connector = "active" if response_status == 200 else None
+            west_connector = "active" if response_status == 200 else None
+            west_detail = "account details" if scenario == "combine" else f"Redis cache TTL {config['ttl_seconds']}s"
+
+        self.respond_json(
+            {
+                "scene": scene["id"],
+                "sceneDetails": scene,
+                "requestPreview": request_preview,
+                "expectedOutcome": expected_outcome,
+                "result": {
+                    "status": response_status,
+                    "routeMatched": config["route"],
+                    "kongServiceMatched": config["service"],
+                    "pluginApplied": "openid-connect + datakit",
+                    "selectedService": selected_service,
+                    "responseBody": response["body"],
+                    "responseHeaders": response["headers"],
+                    "scenario": scenario,
+                    "fallbackMode": fallback_mode if scenario == "fallback" else None,
+                    "authenticatedRole": selected_role,
+                },
+                "consoleView": {
+                    "request": {
+                        "method": config["method"],
+                        "endpoint": target_url,
+                        "headers": req_headers,
+                        "body": None,
+                    },
+                    "response": {
+                        "status": response_status,
+                        "headers": response["headers"],
+                        "body": response["body"],
+                    },
+                },
+                "detailView": {
+                    "entities": normalize_detail_entities(detail_entities),
+                    "steps": [
+                        {
+                            "title": "Authenticated DataKit Request",
+                            "command": build_curl_command(target_url, req_headers, method=config["method"]),
+                            "response": {
+                                "status": response_status,
+                                "headers": response["headers"],
+                                "body": response["body"],
+                            },
+                        }
+                    ],
+                    "curl": build_curl_command(target_url, req_headers, method=config["method"]),
+                    "response": {
+                        "status": response_status,
+                        "headers": response["headers"],
+                        "body": response["body"],
+                    },
+                },
+                "topology": {
+                    "labels": {
+                        "client": ("Client", "Keycloak Authenticated Caller", "consumer-1"),
+                        "kong": ("Gateway", "Kong Data Plane", f"Datakit {config['label']}"),
+                        "east": (
+                            "API1",
+                            "Primary Upstream",
+                            "list accounts" if scenario == "combine" else "primary source",
+                        ),
+                        "west": (
+                            "API2 / Cache",
+                            "Secondary Path",
+                            (
+                                west_detail
+                                if scenario == "fallback"
+                                else "account details"
+                                if scenario == "combine"
+                                else f"Redis cache TTL {config['ttl_seconds']}s"
+                            ),
+                        ),
+                    },
+                    "nodes": {
+                        "kong": "active" if response_status == 200 else "error",
+                        "east": east_state,
+                        "west": west_state,
+                    },
+                    "connectors": {
+                        "clientKong": "active",
+                        "kongEast": east_connector,
+                        "kongWest": west_connector,
+                    },
+                    "statusKong": "DataKit Flow Executed" if response_status == 200 else f"HTTP {response_status}",
+                    "statusKongClass": "success" if response_status == 200 else "error",
+                    "statusRoute": config["label"],
+                    "statusRouteClass": "success" if response_status == 200 else "error",
                 },
                 "architecture": scene["architecture"],
             }
@@ -3227,6 +3572,7 @@ class DemoHandler(BaseHTTPRequestHandler):
         return json.loads(raw or "{}")
 
     def respond_json(self, payload, status=HTTPStatus.OK):
+        payload = enrich_payload_with_trace(payload)
         raw = json_bytes(payload)
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")

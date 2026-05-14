@@ -12,6 +12,7 @@ This project is a local demo environment for **Konnect hybrid** scenarios built 
 - [Demo Overview](#demo-overview)
 - [Provisioning Model](#provisioning-model)
 - [Local Runtime Shape](#local-runtime-shape)
+- [Mock Service Reference](#mock-service-reference)
 - [Observability Stack](#observability-stack)
   - [Latency Fields](#latency-fields)
 - [Payload Encryption Flow](#payload-encryption-flow)
@@ -131,6 +132,12 @@ The local runtime uses:
 - `keycloak`
 
 There is no local Kong control plane or local Postgres in this repo.
+
+## Mock Service Reference
+
+For a scene-organized list of the running mock services, their local ports, and direct `curl` examples that show input and output shapes, see:
+
+- [Mock Services Reference](mock-services-reference.md)
 
 ## Observability Stack
 

@@ -232,6 +232,23 @@
             </div>
           </div>
 
+          <div id="datakitScenarioControls" class="control-card scene-control-group hidden">
+            <p class="label">DataKit Scenario</p>
+            <div class="segmented-control" id="datakitScenarioControl">
+              <button class="segment active" data-datakit-scenario="fallback" type="button">conditional fallback</button>
+              <button class="segment" data-datakit-scenario="combine" type="button">combine results</button>
+              <button class="segment" data-datakit-scenario="cache" type="button">redis cache</button>
+            </div>
+          </div>
+
+          <div id="datakitFallbackModeControls" class="control-card scene-control-group hidden">
+            <p class="label">Fallback Branch</p>
+            <div class="segmented-control segmented-control-two" id="datakitFallbackModeControl">
+              <button class="segment active" data-datakit-fallback-mode="api1-success" type="button">API1 returns 200</button>
+              <button class="segment" data-datakit-fallback-mode="api1-fail" type="button">API1 returns non-200</button>
+            </div>
+          </div>
+
           <div id="injectionSubsceneControls" class="control-card scene-control-group hidden">
             <p class="label">Inspection Location</p>
             <div class="segmented-control segmented-control-two" id="injectionSubsceneControl">

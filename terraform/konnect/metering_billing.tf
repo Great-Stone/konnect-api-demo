@@ -76,10 +76,10 @@ resource "konnect_gateway_plugin_metering_and_billing" "orders_metering_consumer
   }
 
   config = {
-    ingest_endpoint       = var.konnect_metering_ingest_endpoint
-    api_token             = var.konnect_system_token
-    meter_api_requests    = true
-    meter_ai_token_usage  = false
+    ingest_endpoint      = var.konnect_metering_ingest_endpoint
+    api_token            = var.konnect_system_token
+    meter_api_requests   = true
+    meter_ai_token_usage = false
     subject = {
       look_up_value_in = "consumer"
     }

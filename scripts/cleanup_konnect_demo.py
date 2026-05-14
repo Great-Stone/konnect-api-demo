@@ -31,6 +31,9 @@ DEMO_SERVICE_NAMES = {
     "svc-orders-deprecation-v2",
     "svc-orders-transport-security",
     "svc-orders-metering",
+    "svc-datakit-fallback",
+    "svc-datakit-combine",
+    "svc-datakit-cache",
 }
 
 DEMO_ROUTE_NAMES = {
@@ -64,6 +67,9 @@ DEMO_ROUTE_NAMES = {
     "route-orders-http-blocked",
     "route-orders-http-redirect",
     "route-orders-metering-consumer",
+    "route-datakit-fallback",
+    "route-datakit-combine",
+    "route-datakit-cache",
 }
 
 DEMO_UPSTREAM_NAMES = {

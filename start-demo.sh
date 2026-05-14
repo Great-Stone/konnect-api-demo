@@ -83,6 +83,9 @@ docker compose up -d \
   orders-instance-2 \
   orders-v1 \
   orders-v2 \
+  datakit-api1 \
+  datakit-api2 \
+  redis \
   keycloak \
   loki \
   tempo \
