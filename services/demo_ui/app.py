@@ -759,21 +759,34 @@ def enrich_payload_with_trace(payload):
     if not request_id:
         return payload
 
-    trace_id = lookup_trace_id_for_request(request_id)
-    if not trace_id:
-        return payload
-
     payload["requestId"] = request_id
-    payload["traceId"] = trace_id
 
     result = payload.get("result")
     if isinstance(result, dict):
         result["requestId"] = request_id
-        result["traceId"] = trace_id
+
+    trace_id = lookup_trace_id_for_request(request_id)
+    if trace_id:
+        payload["traceId"] = trace_id
+        if isinstance(result, dict):
+            result["traceId"] = trace_id
 
     detail_view = payload.get("detailView")
     if isinstance(detail_view, dict):
-        detail_view["traceId"] = trace_id
+        if trace_id:
+            detail_view["traceId"] = trace_id
+        entities = detail_view.get("entities")
+        if isinstance(entities, list):
+            entities.append(
+                [
+                    "Trace Source",
+                    (
+                        f"{trace_id} resolved from Loki using request_id {request_id}"
+                        if trace_id
+                        else f"Trace lookup uses Loki with request_id {request_id}; trace_id not resolved yet"
+                    ),
+                ]
+            )
 
     return payload
 
