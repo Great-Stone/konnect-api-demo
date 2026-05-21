@@ -273,11 +273,12 @@ services:
       DEMO_HOST: 0.0.0.0
       DEMO_PORT: "8080"
       KONG_PROXY_URL: ${KONG_PROXY_URL:-http://kong-dp:8000}
-      DEMO_LOGS_URL: ${DEMO_LOGS_URL:-https://cloud.konghq.com/us/analytics/dashboards/85891a7b-d91e-4548-ba83-f82cd561342d}
+      KONNECT_UI_BASE_URL: ${KONNECT_UI_BASE_URL:-https://cloud.konghq.com/us}
+      DEMO_LOGS_URL: ${DEMO_LOGS_URL:-}
       DEMO_REQUEST_AUDIT_URL: ${DEMO_REQUEST_AUDIT_URL:-http://localhost:3001/d/kong-observability-overview/kong-observability-overview}
       DEMO_AUDIT_URL: ${DEMO_AUDIT_URL:-http://localhost:3001/d/konnect-audit-trail/konnect-audit-trail}
       DEMO_TRACE_URL: ${DEMO_TRACE_URL:-http://localhost:3001/explore}
-      DEMO_DEBUGGER_URL: ${DEMO_DEBUGGER_URL:-https://cloud.konghq.com/us/analytics/debugger/sessions?cp_id=abf0ddb5-0c27-4ab3-8825-971be6217904}
+      DEMO_DEBUGGER_URL: ${DEMO_DEBUGGER_URL:-}
       KONNECT_TOKEN: ${KONNECT_TOKEN:-}
       KONNECT_CP_ID: ${KONNECT_CP_ID:-}
       KONNECT_SERVER_URL: ${KONNECT_SERVER_URL:-https://us.api.konghq.com}

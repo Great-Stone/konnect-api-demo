@@ -421,6 +421,12 @@ Important values include:
 - Azure AD tenant, audience, and client credentials
 - Keycloak bootstrap and demo client values
 
+UI link behavior:
+
+- `DEMO_LOGS_URL` sets the **Konnect Observability** button target.
+- `DEMO_DEBUGGER_URL` sets the **Debugger** button target.
+- Update those two values directly in `.env` if you want them to point at your own Konnect UI URLs.
+
 ### Certificates
 
 Place the Konnect hybrid client materials in:

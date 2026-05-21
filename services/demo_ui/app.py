@@ -19,9 +19,22 @@ IMG_DIR = Path("/img")
 KONG_PROXY_URL = os.environ.get("KONG_PROXY_URL", "http://localhost:8000")
 KONG_TLS_PROXY_URL = os.environ.get("KONG_TLS_PROXY_URL", "https://kong-dp:8443")
 LOKI_QUERY_URL = os.environ.get("LOKI_QUERY_URL", "http://loki:3100/loki/api/v1/query")
-DEMO_LOGS_URL = os.environ.get(
-    "DEMO_LOGS_URL",
-    "https://cloud.konghq.com/us/analytics/dashboards/85891a7b-d91e-4548-ba83-f82cd561342d",
+KONNECT_UI_BASE_URL = os.environ.get("KONNECT_UI_BASE_URL", "https://cloud.konghq.com/us").rstrip("/")
+KONNECT_CP_ID = os.environ.get("KONNECT_CP_ID", "").strip()
+
+
+def build_konnect_ui_url(path: str, *, query: dict[str, str] | None = None) -> str:
+    base = f"{KONNECT_UI_BASE_URL}/{path.lstrip('/')}"
+    if not query:
+        return base
+    filtered = {key: value for key, value in query.items() if value}
+    if not filtered:
+        return base
+    return f"{base}?{urllib.parse.urlencode(filtered)}"
+
+
+DEMO_LOGS_URL = os.environ.get("DEMO_LOGS_URL") or build_konnect_ui_url(
+    "/analytics/dashboards/85891a7b-d91e-4548-ba83-f82cd561342d"
 )
 DEMO_REQUEST_AUDIT_URL = os.environ.get("DEMO_REQUEST_AUDIT_URL", "https://cloud.konghq.com")
 DEMO_AUDIT_URL = os.environ.get(
@@ -30,9 +43,8 @@ DEMO_AUDIT_URL = os.environ.get(
 )
 DEMO_TRACE_URL = os.environ.get("DEMO_TRACE_URL", "http://localhost:3001/explore")
 DEMO_PAYLOAD_INSPECTION_URL = os.environ.get("DEMO_PAYLOAD_INSPECTION_URL", "http://localhost:3001/explore")
-DEMO_DEBUGGER_URL = os.environ.get(
-    "DEMO_DEBUGGER_URL",
-    "https://cloud.konghq.com/us/analytics/debugger/sessions?cp_id=abf0ddb5-0c27-4ab3-8825-971be6217904",
+DEMO_DEBUGGER_URL = os.environ.get("DEMO_DEBUGGER_URL") or build_konnect_ui_url(
+    "/analytics/debugger/sessions", query={"cp_id": KONNECT_CP_ID}
 )
 DOCKER_SOCKET_PATH = os.environ.get("DOCKER_SOCKET_PATH", "/var/run/docker.sock")
 AD_PROTECTED_API_TENANT_ID = os.environ.get("AD_PROTECTED_API_TENANT_ID", "")
@@ -49,7 +61,6 @@ KEYCLOAK_CONSUMER2_SECRET = os.environ.get("KEYCLOAK_CONSUMER2_SECRET", "consume
 KEYCLOAK_INTERNAL_BASE_URL = os.environ.get("KEYCLOAK_INTERNAL_BASE_URL", "http://keycloak:8080")
 CRYPTO_HELPER_URL = os.environ.get("CRYPTO_HELPER_URL", "http://localhost:8092")
 KONNECT_TOKEN = os.environ.get("KONNECT_TOKEN", "").strip()
-KONNECT_CP_ID = os.environ.get("KONNECT_CP_ID", "").strip()
 KONNECT_SERVER_URL = os.environ.get("KONNECT_SERVER_URL", "https://us.api.konghq.com").rstrip("/")
 
 CANARY_COUNTERS_LOCK = threading.Lock()
