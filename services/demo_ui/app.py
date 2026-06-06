@@ -472,13 +472,13 @@ RESILIENCE_WEIGHTED_COUNTS = {"orders-instance-1": 0, "orders-instance-2": 0}
 RESILIENCE_INSTANCES = {
     "instance-1": {
         "label": "Service Instance 1",
-        "container": "tcs-orders-instance-1",
+        "container": "konnect-demo-orders-instance-1",
         "service": "orders-instance-1",
         "target": "orders-instance-1:9201",
     },
     "instance-2": {
         "label": "Service Instance 2",
-        "container": "tcs-orders-instance-2",
+        "container": "konnect-demo-orders-instance-2",
         "service": "orders-instance-2",
         "target": "orders-instance-2:9202",
     },

@@ -11,6 +11,7 @@ This project is a local demo environment for **Konnect hybrid** scenarios built 
 - [Current Scope](#current-scope)
 - [Demo Overview](#demo-overview)
 - [Provisioning Model](#provisioning-model)
+  - [Metering And Billing Automation](#metering-and-billing-automation)
 - [Local Runtime Shape](#local-runtime-shape)
 - [Mock Service Reference](#mock-service-reference)
 - [Observability Stack](#observability-stack)
@@ -48,7 +49,7 @@ This project is a local demo environment for **Konnect hybrid** scenarios built 
 - An existing Konnect control plane
 - A valid Konnect personal access token
 - Konnect hybrid control plane bootstrap details for the local data plane
-- Once the start up script runs - do set up Metering and Billing as per ![metering & billing](metering-billing-next-steps.md)
+- Set `KONNECT_SYSTEM_TOKEN` in `.env` if you want the Metering and Billing demo catalog, subscriptions, and bootstrap traffic to be configured automatically at startup
 
 ### Local Tooling
 
@@ -114,6 +115,26 @@ That includes:
 - targets
 
 Keycloak itself is bootstrapped locally by a script. It is not managed by Terraform in this repo.
+
+### Metering And Billing Automation
+
+Metering & Billing is automated as part of the demo lifecycle when `KONNECT_SYSTEM_TOKEN` is set in `.env`.
+
+On `./start-demo.sh`, the repo automatically:
+
+- creates or updates the demo meter
+- creates or updates the demo feature
+- creates or updates the two demo plans
+- creates or updates the demo customers
+- creates or updates the demo subscriptions
+- sends bootstrap traffic through the metered route so usage events start flowing immediately
+
+On `./stop-demo.sh`, the repo automatically attempts to tear down the same demo Metering & Billing resources.
+
+Important caveat:
+
+- customer deletion can still be blocked by non-final invoices on paid plans
+- if that happens, plans / features / meters may be removed but some `demo*` customers can remain until invoice state settles or is handled in Konnect billing
 
 ## Local Runtime Shape
 
@@ -418,6 +439,12 @@ Important values include:
 - `GRAFANA_ADMIN_USER`
 - `GRAFANA_ADMIN_PASSWORD`
 - `KONNECT_AUDIT_SHARED_SECRET`
+- `KONNECT_SYSTEM_TOKEN`
+
+Metering & Billing automation notes:
+
+- `KONNECT_SYSTEM_TOKEN` enables automatic Metering & Billing setup at startup and teardown at shutdown
+- without `KONNECT_SYSTEM_TOKEN`, the rest of the Konnect demo still runs, but Metering & Billing catalog, customers, subscriptions, and bootstrap usage traffic are skipped
 - Azure AD tenant, audience, and client credentials
 - Keycloak bootstrap and demo client values
 
@@ -437,6 +464,10 @@ Place the Konnect hybrid client materials in:
 The private key is intentionally excluded from source control.
 
 ## Run
+
+If `KONNECT_SYSTEM_TOKEN` is present, `./start-demo.sh` also provisions the demo Metering & Billing catalog and subscriptions automatically.
+
+`./stop-demo.sh` also attempts to tear down the same Metering & Billing demo resources automatically.
 
 Start the full demo stack and apply Konnect configuration:
 

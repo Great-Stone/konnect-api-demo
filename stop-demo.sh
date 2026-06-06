@@ -14,6 +14,11 @@ if [[ -f ".env" ]]; then
 fi
 
 if [[ -n "${KONNECT_TOKEN:-}" && -n "${KONNECT_CP_ID:-}" ]]; then
+  if [[ -n "${KONNECT_SYSTEM_TOKEN:-}" ]]; then
+    echo "Tearing down Metering and Billing demo resources"
+    python3 scripts/teardown_metering_billing.py || true
+  fi
+
   echo "Tearing down Konnect audit webhook"
   python3 scripts/teardown_konnect_audit.py || true
 

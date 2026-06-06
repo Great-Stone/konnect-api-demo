@@ -1,7 +1,7 @@
 services:
   kong-dp:
     image: ${KONG_IMAGE:-kong/kong-gateway:3.14}
-    container_name: tcs-kong-dp
+    container_name: konnect-demo-kong-dp
     environment:
       KONG_ROLE: data_plane
       KONG_DATABASE: "off"
@@ -44,7 +44,7 @@ services:
 
   orders-east:
     image: python:3.13-slim
-    container_name: tcs-orders-east
+    container_name: konnect-demo-orders-east
     working_dir: /app
     command: ["python", "-u", "server.py", "--service", "orders-east", "--region", "east", "--port", "9101"]
     ports:
@@ -54,7 +54,7 @@ services:
 
   orders-west:
     image: python:3.13-slim
-    container_name: tcs-orders-west
+    container_name: konnect-demo-orders-west
     working_dir: /app
     command: ["python", "-u", "server.py", "--service", "orders-west", "--region", "west", "--port", "9102"]
     ports:
@@ -64,7 +64,7 @@ services:
 
   orders-instance-1:
     image: python:3.13-slim
-    container_name: tcs-orders-instance-1
+    container_name: konnect-demo-orders-instance-1
     working_dir: /app
     command: ["python", "-u", "server.py", "--service", "orders-instance-1", "--region", "instance-1", "--port", "9201"]
     ports:
@@ -74,7 +74,7 @@ services:
 
   orders-instance-2:
     image: python:3.13-slim
-    container_name: tcs-orders-instance-2
+    container_name: konnect-demo-orders-instance-2
     working_dir: /app
     command: ["python", "-u", "server.py", "--service", "orders-instance-2", "--region", "instance-2", "--port", "9202"]
     ports:
@@ -84,7 +84,7 @@ services:
 
   orders-v1:
     image: python:3.13-slim
-    container_name: tcs-orders-v1
+    container_name: konnect-demo-orders-v1
     working_dir: /app
     command:
       [
@@ -109,7 +109,7 @@ services:
 
   orders-v2:
     image: python:3.13-slim
-    container_name: tcs-orders-v2
+    container_name: konnect-demo-orders-v2
     working_dir: /app
     command:
       [
@@ -134,7 +134,7 @@ services:
 
   datakit-api1:
     image: python:3.13-slim
-    container_name: tcs-datakit-api1
+    container_name: konnect-demo-datakit-api1
     working_dir: /app
     command: ["python", "-u", "server.py", "--service", "datakit-api1", "--region", "datakit", "--port", "9401"]
     ports:
@@ -144,7 +144,7 @@ services:
 
   datakit-api2:
     image: python:3.13-slim
-    container_name: tcs-datakit-api2
+    container_name: konnect-demo-datakit-api2
     working_dir: /app
     command: ["python", "-u", "server.py", "--service", "datakit-api2", "--region", "datakit", "--port", "9402"]
     ports:
@@ -154,14 +154,14 @@ services:
 
   redis:
     image: redis:7.4-alpine
-    container_name: tcs-redis
+    container_name: konnect-demo-redis
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "6379:6379"
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.0
-    container_name: tcs-keycloak
+    container_name: konnect-demo-keycloak
     command: ["start-dev", "--http-enabled=true", "--hostname-strict=false"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
@@ -171,7 +171,7 @@ services:
 
   loki:
     image: grafana/loki:3.0.0
-    container_name: tcs-loki
+    container_name: konnect-demo-loki
     command: ["-config.file=/etc/loki/config.yaml"]
     ports:
       - "3100:3100"
@@ -180,7 +180,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.5.0
-    container_name: tcs-tempo
+    container_name: konnect-demo-tempo
     command: ["-config.file=/etc/tempo/config.yaml"]
     ports:
       - "3201:3200"
@@ -190,7 +190,7 @@ services:
 
   tempo-portal:
     image: nginx:1.27-alpine
-    container_name: tcs-tempo-portal
+    container_name: konnect-demo-tempo-portal
     ports:
       - "3200:80"
     volumes:
@@ -201,7 +201,7 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.101.0
-    container_name: tcs-otel-collector
+    container_name: konnect-demo-otel-collector
     command: ["--config=/etc/otelcol/config.yaml"]
     ports:
       - "4317:4317"
@@ -214,7 +214,7 @@ services:
 
   konnect-audit-receiver:
     image: python:3.13-slim
-    container_name: tcs-konnect-audit-receiver
+    container_name: konnect-demo-audit-receiver
     working_dir: /app
     command: ["python", "-u", "app.py"]
     environment:
@@ -231,7 +231,7 @@ services:
 
   crypto-helper:
     image: python:3.13-slim
-    container_name: tcs-crypto-helper
+    container_name: konnect-demo-crypto-helper
     working_dir: /app
     command: ["python", "-u", "app.py"]
     environment:
@@ -248,7 +248,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.0.0
-    container_name: tcs-grafana
+    container_name: konnect-demo-grafana
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -266,7 +266,7 @@ services:
 
   demo-ui:
     image: python:3.13-slim
-    container_name: tcs-demo-ui
+    container_name: konnect-demo-ui
     working_dir: /app
     command: ["python", "-u", "app.py"]
     environment:

@@ -125,6 +125,13 @@ terraform -chdir=terraform/konnect apply -input=false -auto-approve
 echo "Starting Konnect hybrid data plane and demo UI"
 docker compose up -d --force-recreate kong-dp demo-ui
 
+if [[ -n "${KONNECT_SYSTEM_TOKEN:-}" ]]; then
+  echo "Configuring Metering and Billing demo resources"
+  python3 scripts/setup_metering_billing.py
+else
+  echo "Skipping Metering and Billing automation because KONNECT_SYSTEM_TOKEN is not set"
+fi
+
 stop_existing_ngrok
 
 echo "Starting ngrok tunnel for Konnect audit webhook receiver"

@@ -82,6 +82,7 @@ resource "konnect_gateway_plugin_metering_and_billing" "orders_metering_consumer
     meter_ai_token_usage = false
     subject = {
       look_up_value_in = "consumer"
+      field            = "custom_id"
     }
   }
 

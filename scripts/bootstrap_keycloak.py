@@ -6,7 +6,7 @@ import sys
 import time
 
 
-CONTAINER = os.environ.get("KEYCLOAK_CONTAINER_NAME", "tcs-keycloak")
+CONTAINER = os.environ.get("KEYCLOAK_CONTAINER_NAME", "konnect-demo-keycloak")
 ADMIN_USERNAME = os.environ.get("KEYCLOAK_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("KEYCLOAK_ADMIN_PASSWORD", "admin")
 REALM = os.environ.get("KEYCLOAK_REALM", "kong-demo")

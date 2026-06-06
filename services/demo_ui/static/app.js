@@ -721,6 +721,54 @@ function defaultTopologyForScene() {
   };
 }
 
+function pendingTopologyForScene() {
+  const baseTopology = defaultTopologyForScene();
+  const topology = {
+    ...baseTopology,
+    nodes: {
+      ...(baseTopology.nodes || {}),
+      kong: "active",
+    },
+    connectors: {
+      ...(baseTopology.connectors || {}),
+      clientKong: "active",
+    },
+    statusKong: "Kong Evaluating Request",
+    statusKongClass: "neutral",
+    statusRoute: "Route Evaluation In Progress",
+    statusRouteClass: "neutral",
+  };
+
+  if (state.currentScene === "network-policy-ip-allow-deny") {
+    topology.labels.east = ["Protected API", "Orders API", "Waiting for gateway decision"];
+    topology.labels.west = ["Network Policy", "Allow + Deny List", "Evaluating IP policy"];
+  } else if (state.currentScene === "data-quality-schema-validation") {
+    topology.labels.east = ["Protected API", "Orders API", "Waiting for gateway decision"];
+    topology.labels.west = ["Schema Policy", "Body + Query + Headers", "Validating request"];
+  } else if (state.currentScene === "traffic-control-request-size-limiting") {
+    topology.labels.east = ["Protected API", "Orders API", "Waiting for gateway decision"];
+    topology.labels.west = ["Payload Policy", "Request Size Limit", "Checking payload size"];
+  } else if (state.currentScene === "security-injection-protection") {
+    topology.labels.east = ["Protected API", "Orders API", "Waiting for gateway decision"];
+    topology.labels.west = ["Inspection Policy", state.injectionSubscene.replaceAll("-", " "), "Scanning request"];
+  } else if (state.currentScene === "transport-security-http-enforcement") {
+    topology.labels.east = ["Protected API", "Orders API", "Waiting for gateway decision"];
+    topology.labels.west = ["TLS Policy", "HTTPS Enforcement", "Checking transport policy"];
+  } else if (
+    state.currentScene === "identity-azure-token-validation" ||
+    state.currentScene === "identity-keycloak-authorization"
+  ) {
+    topology.labels.east = ["Protected API", "Orders API", "Waiting for gateway decision"];
+    topology.labels.west = [
+      topology.labels.west[0],
+      topology.labels.west[1],
+      "Validating token",
+    ];
+  }
+
+  return topology;
+}
+
 function updateStaticPreview() {
   renderRows(elements.requestPreviewGrid, computePreviewRows());
   elements.expectedOutcome.textContent = computeExpectedOutcome();
@@ -1123,6 +1171,7 @@ function startRateLimitCountdown() {
 async function runScenario() {
   elements.runScenarioButton.disabled = true;
   resetView();
+  renderTopology(pendingTopologyForScene());
   try {
     let path = "/api/scenes/header-routing/run";
     let body = { region: state.region === "missing" ? "" : state.region };
