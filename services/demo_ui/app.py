@@ -927,7 +927,12 @@ def extract_rate_limit_metrics(headers):
             metrics["remaining"] = parsed
         elif "reset" in lower_key and metrics["reset"] is None:
             metrics["reset"] = parsed
-        elif "limit" in lower_key and metrics["limit"] is None:
+        elif (
+            "limit" in lower_key
+            and "remaining" not in lower_key
+            and "reset" not in lower_key
+            and metrics["limit"] is None
+        ):
             metrics["limit"] = parsed
     return metrics
 
@@ -940,6 +945,10 @@ def update_execution_counter(counter_key, limit, remaining, reset_seconds, respo
 
     if limit is not None and remaining is not None and response_status != 429:
         execution_count = max(limit - remaining, 0)
+        if execution_count == 0:
+            execution_count = (state["execution_count"] + 1) if state else 1
+    elif limit is not None and remaining is not None and response_status == 429:
+        execution_count = max(limit - remaining + 1, 1)
     elif state:
         execution_count = state["execution_count"] + 1
     elif limit is not None:
