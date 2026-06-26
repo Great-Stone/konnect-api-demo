@@ -122,6 +122,11 @@ TF_VAR_keycloak_realm="${KEYCLOAK_REALM:-kong-demo}" \
 TF_VAR_keycloak_allowed_role="${KEYCLOAK_ALLOWED_ROLE:-api-access}" \
 terraform -chdir=terraform/konnect apply -input=false -auto-approve
 
+echo "Applying Konnect observability dashboard"
+DEMO_LOGS_URL="$(python3 scripts/configure_konnect_observability_dashboard.py | python3 -c 'import json,sys; print(json.load(sys.stdin)["dashboard_url"])')"
+export DEMO_LOGS_URL
+python3 scripts/sync_env_var.py DEMO_LOGS_URL "$DEMO_LOGS_URL"
+
 echo "Starting Konnect hybrid data plane and demo UI"
 docker compose up -d --force-recreate kong-dp demo-ui
 
