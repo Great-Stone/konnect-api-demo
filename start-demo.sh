@@ -56,6 +56,10 @@ stop_existing_ngrok() {
     fi
     rm -f "$NGROK_PID_FILE"
   fi
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -f "ngrok http 8091" >/dev/null 2>&1 || true
+    sleep 1
+  fi
 }
 
 wait_for_ngrok_tunnel() {
@@ -69,6 +73,13 @@ wait_for_ngrok_tunnel() {
     sleep 1
   done
   return 1
+}
+
+verify_ngrok_tunnel() {
+  local public_url="$1"
+  curl -fsS \
+    -H "ngrok-skip-browser-warning: 1" \
+    "${public_url%/}/health" >/dev/null
 }
 
 echo "Starting local demo dependencies"
@@ -145,6 +156,11 @@ echo $! >"$NGROK_PID_FILE"
 
 KONNECT_AUDIT_PUBLIC_URL="$(wait_for_ngrok_tunnel)" || {
   echo "ngrok tunnel did not become ready in time" >&2
+  exit 1
+}
+
+verify_ngrok_tunnel "$KONNECT_AUDIT_PUBLIC_URL" || {
+  echo "ngrok tunnel health check failed for ${KONNECT_AUDIT_PUBLIC_URL}/health" >&2
   exit 1
 }
 
