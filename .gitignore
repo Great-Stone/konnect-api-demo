@@ -11,6 +11,7 @@ terraform/konnect/terraform.tfstate
 terraform/konnect/terraform.tfstate.backup
 
 certs/private.key
+certs/public.cer
 certs/crypto/
 .playwright-mcp/
 __pycache__/

@@ -13,7 +13,8 @@ from pathlib import Path
 
 KONNECT_SERVER_URL = os.environ.get("KONNECT_SERVER_URL", "https://us.api.konghq.com").rstrip("/")
 SYSTEM_TOKEN = os.environ.get("KONNECT_SYSTEM_TOKEN", "").strip()
-KONG_PROXY_URL = os.environ.get("KONG_PROXY_URL", "http://localhost:8000").rstrip("/")
+KONG_PROXY_PORT = os.environ.get("KONG_PROXY_PORT", "8000").strip()
+KONG_PROXY_URL = os.environ.get("KONG_PROXY_URL", f"http://localhost:{KONG_PROXY_PORT}").rstrip("/")
 KONNECT_CP_ID = os.environ.get("KONNECT_CP_ID", "").strip()
 TERRAFORM_KONNECT_STATE_PATH = Path(__file__).resolve().parent.parent / "terraform" / "konnect" / "terraform.tfstate"
 BOOTSTRAP_READY_TIMEOUT_SECONDS = int(os.environ.get("KONNECT_METERING_BOOTSTRAP_TIMEOUT_SECONDS", "90"))
@@ -75,11 +76,11 @@ PLAN_SPECS = [
                 "rate_cards": [
                     {
                         "key": "orders_api_request",
-                        "name": "API Requests at $1/request",
+                        "name": "API Requests at 1,000 KRW/request",
                         "feature_key": "orders_api_request",
                         "billing_cadence": "P1M",
                         "payment_term": "in_arrears",
-                        "price": {"type": "unit", "amount": "1"},
+                        "price": {"type": "unit", "amount": "1000"},
                     }
                 ],
             }
@@ -146,7 +147,8 @@ def load_dotenv() -> None:
 load_dotenv()
 KONNECT_SERVER_URL = os.environ.get("KONNECT_SERVER_URL", KONNECT_SERVER_URL).rstrip("/")
 SYSTEM_TOKEN = os.environ.get("KONNECT_SYSTEM_TOKEN", SYSTEM_TOKEN).strip()
-KONG_PROXY_URL = os.environ.get("KONG_PROXY_URL", KONG_PROXY_URL).rstrip("/")
+KONG_PROXY_PORT = os.environ.get("KONG_PROXY_PORT", KONG_PROXY_PORT).strip()
+KONG_PROXY_URL = os.environ.get("KONG_PROXY_URL", f"http://localhost:{KONG_PROXY_PORT}").rstrip("/")
 KONNECT_CP_ID = os.environ.get("KONNECT_CP_ID", KONNECT_CP_ID).strip()
 
 

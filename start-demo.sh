@@ -15,6 +15,11 @@ if [[ -f ".env" ]]; then
   set +a
 fi
 
+KONG_PROXY_PORT="${KONG_PROXY_PORT:-8000}"
+KONG_PROXY_TLS_PORT="${KONG_PROXY_TLS_PORT:-8443}"
+KONG_HOST_PROXY_URL="${KONG_HOST_PROXY_URL:-http://localhost:${KONG_PROXY_PORT}}"
+KONG_HOST_TLS_PROXY_URL="${KONG_HOST_TLS_PROXY_URL:-https://localhost:${KONG_PROXY_TLS_PORT}}"
+
 mkdir -p "$RUNTIME_DIR"
 
 if [[ -z "${KONNECT_TOKEN:-}" || -z "${KONNECT_CP_ID:-}" ]]; then
@@ -143,7 +148,7 @@ docker compose up -d --force-recreate kong-dp demo-ui
 
 if [[ -n "${KONNECT_SYSTEM_TOKEN:-}" ]]; then
   echo "Configuring Metering and Billing demo resources"
-  python3 scripts/setup_metering_billing.py
+  KONG_PROXY_URL="$KONG_HOST_PROXY_URL" python3 scripts/setup_metering_billing.py
 else
   echo "Skipping Metering and Billing automation because KONNECT_SYSTEM_TOKEN is not set"
 fi
@@ -172,8 +177,8 @@ python3 scripts/configure_konnect_audit.py
 echo
 echo "Konnect configuration applied"
 echo "UI:               http://localhost:8080"
-echo "Kong Proxy:        http://localhost:8000"
-echo "Kong Proxy TLS:    https://localhost:8443"
+echo "Kong Proxy:        $KONG_HOST_PROXY_URL"
+echo "Kong Proxy TLS:    $KONG_HOST_TLS_PROXY_URL"
 echo "Grafana:           http://localhost:3001"
 echo "Loki:              http://localhost:3100"
 echo "Trace Portal:      http://localhost:3200"

@@ -22,7 +22,7 @@ services:
       KONG_REAL_IP_HEADER: X-Forwarded-For
       KONG_TRUSTED_IPS: 0.0.0.0/0,::/0
       KONG_REAL_IP_RECURSIVE: "on"
-      KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
+      KONG_PROXY_LISTEN: 0.0.0.0:${KONG_PROXY_PORT:-8000}, 0.0.0.0:${KONG_PROXY_TLS_PORT:-8443} ssl
       KONG_ADMIN_LISTEN: "off"
       KONG_STATUS_LISTEN: 0.0.0.0:8100
       KONG_PROXY_ACCESS_LOG: /dev/stdout
@@ -33,8 +33,8 @@ services:
       KONG_NGINX_MAIN_ENV: CRYPTO_GATEWAY_PRIVATE_KEY_PASSPHRASE
       CRYPTO_GATEWAY_PRIVATE_KEY_PASSPHRASE: ${CRYPTO_GATEWAY_PRIVATE_KEY_PASSPHRASE:-gateway-demo-passphrase}
     ports:
-      - "8000:8000"
-      - "8443:8443"
+      - "${KONG_PROXY_PORT:-8000}:${KONG_PROXY_PORT:-8000}"
+      - "${KONG_PROXY_TLS_PORT:-8443}:${KONG_PROXY_TLS_PORT:-8443}"
     volumes:
       - ./certs:/certs:ro
       - ./certs/crypto:/crypto:ro
@@ -272,7 +272,9 @@ services:
     environment:
       DEMO_HOST: 0.0.0.0
       DEMO_PORT: "8080"
-      KONG_PROXY_URL: ${KONG_PROXY_URL:-http://kong-dp:8000}
+      KONG_PROXY_URL: ${KONG_PROXY_URL:-http://kong-dp:${KONG_PROXY_PORT:-8000}}
+      KONG_TLS_PROXY_URL: ${KONG_TLS_PROXY_URL:-https://kong-dp:${KONG_PROXY_TLS_PORT:-8443}}
+      KONG_PROXY_HOST: localhost:${KONG_PROXY_PORT:-8000}
       KONNECT_UI_BASE_URL: ${KONNECT_UI_BASE_URL:-https://cloud.konghq.com/us}
       DEMO_LOGS_URL: ${DEMO_LOGS_URL:-}
       DEMO_REQUEST_AUDIT_URL: ${DEMO_REQUEST_AUDIT_URL:-http://localhost:3001/d/kong-observability-overview/kong-observability-overview}

@@ -440,6 +440,10 @@ Important values include:
 - `GRAFANA_ADMIN_PASSWORD`
 - `KONNECT_AUDIT_SHARED_SECRET`
 - `KONNECT_SYSTEM_TOKEN`
+- `KONG_PROXY_PORT` (default `8000`) — host-published Kong proxy HTTP port
+- `KONG_PROXY_TLS_PORT` (default `8443`) — host-published Kong proxy HTTPS port
+
+Optional URL overrides: `KONG_PROXY_URL`, `KONG_TLS_PROXY_URL`, `KONG_HOST_PROXY_URL`
 
 Metering & Billing automation notes:
 
@@ -480,10 +484,11 @@ Stop the local stack and clean up local state:
 ./stop-demo.sh
 ```
 
-When the stack is up, the main endpoints are:
+When the stack is up, the main endpoints are (ports follow `.env`; defaults shown):
 
 - UI: `http://localhost:8080`
-- Kong Proxy: `http://localhost:8000`
+- Kong Proxy: `http://localhost:8000` (`KONG_PROXY_PORT`)
+- Kong Proxy TLS: `https://localhost:8443` (`KONG_PROXY_TLS_PORT`)
 - Keycloak: `http://localhost:8081`
 - Grafana: `http://localhost:3001`
 - Loki: `http://localhost:3100`

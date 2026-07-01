@@ -18,6 +18,10 @@ STATIC_DIR = APP_DIR / "static"
 IMG_DIR = Path("/img")
 KONG_PROXY_URL = os.environ.get("KONG_PROXY_URL", "http://localhost:8000")
 KONG_TLS_PROXY_URL = os.environ.get("KONG_TLS_PROXY_URL", "https://kong-dp:8443")
+KONG_PROXY_HOST = os.environ.get(
+    "KONG_PROXY_HOST",
+    f"localhost:{os.environ.get('KONG_PROXY_PORT', '8000')}",
+)
 LOKI_QUERY_URL = os.environ.get("LOKI_QUERY_URL", "http://loki:3100/loki/api/v1/query")
 LOKI_QUERY_RANGE_URL = os.environ.get(
     "LOKI_QUERY_RANGE_URL",
@@ -1676,7 +1680,7 @@ class DemoHandler(BaseHTTPRequestHandler):
         req_headers = {
             "Accept": "application/json",
             "x-request-id": str(uuid.uuid4()),
-            "Host": "localhost:8000",
+            "Host": KONG_PROXY_HOST,
         }
         target_url = f"{KONG_PROXY_URL}{path}"
         response = request_through_kong(target_url, req_headers)

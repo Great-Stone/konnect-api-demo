@@ -2,16 +2,16 @@
 # Manual edits may be lost in future updates.
 
 provider "registry.terraform.io/kong/konnect" {
-  version     = "3.18.1"
+  version     = "3.19.0"
   constraints = "~> 3.18"
   hashes = [
-    "h1:I9TnMIuhTNRZh24juSNtdSxvWpbXG+qM/5PA6GlRvxI=",
-    "zh:2cef1753bcae4e06dc11a921a4c5cb7fa457390d215795c6aca744b3b715087f",
-    "zh:4ddff10491980ea2a81367dda4cc5e99edfc78c90670e4c90740e57a86acefcd",
+    "h1:853ZXYnM7ElgxLZiCXO5qVXAUsf+a3dRgMD8dfCnQog=",
+    "zh:01616a3e5d626dec8c4f254cca83bb622ecba44ab85d23c6a22ebd13d5e12d78",
+    "zh:1ee49b20182925e78a7d95addc9033cbac16f24067ade105b6a54073291c9b5e",
     "zh:890df766e9b839623b1f0437355032a3c006226a6c200cd911e15ee1a9014e9f",
-    "zh:93dd30030f196307d0bf9c38832f60c4e579635d2e321c8772b4c2b16b805a75",
-    "zh:989cbd13f5b6cbe28f548cdb2a52a1216a1080616668fa93bf28a6131f1e35a9",
-    "zh:ac5d7477558e3d41c64e0ea5d9910b63f90056d8dbf40eebe1748e1967a7ee39",
-    "zh:b21e0fd9fab69004a11d33cf1cd69bc9bd870054f9f59c28c7a8cf73d4e42fa0",
+    "zh:9c557a7ec9724f01db10ca65b20906e82efbdc8f1e1cc00b728070d44be4bbd7",
+    "zh:a1163b7b267f93f8e75d7c97b62ead5054e41c0abdfd80dd2bef06027fb15b65",
+    "zh:cde2b2b051a81f5a11bdee2ed363f63174087f677f4d26661829179fc10ec287",
+    "zh:de774e8bd24f2a385ab4b0e7b81b3807dbc92b76a5aad54c96b7c0edb1ecb9ce",
   ]
 }
